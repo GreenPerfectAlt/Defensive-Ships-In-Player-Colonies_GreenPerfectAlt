@@ -1,6 +1,6 @@
 <mod unique="Defensive_Ships_In_Player_Colonies"
      displayName="Defensive Ships in Player Colonies"
-     description="Dynamically deploys defensive fleets, scalable planetary garrisons, 4X logistics, and colonial mutiny mechanics."
+     description="Dynamically deploys defensive fleets, scalable planetary garrisons, 4X upkeep logistics, city unrest scanning, and colonial mutiny mechanics."
      installerSystemVersion="1.0.1.2"
      hasCustomInstaller="true"
      dllsBuild="$SPOREMOD_DLLS_BUILD"
@@ -30,14 +30,49 @@
     <componentGroup unique="ColonialRebellionsGroup" displayName="Colonial Rebellions">
         <component unique="Rebellion_Disabled"
                    displayName="Disabled (0.0x)"
-                   description="No garrison mutinies under any circumstances.">Rebellion_Disabled.package</component>
+                   description="Disables all garrison mutinies and civil wars across both player and NPC worlds.">Rebellion_Disabled.package</component>
+        <component unique="Rebellion_Low"
+                   displayName="Stable (0.5x)"
+                   description="Half mutiny frequency: rebellions occur mostly on harsh, bankrupt frontier T0/T1 outposts.">Rebellion_Low.package</component>
         <component unique="Rebellion_Enabled"
-                   displayName="Enabled (1.0x)"
-                   description="Garrisons risk defection during bankruptcy and heavy siege casualties (Zealots immune)."
+                   displayName="Standard (1.0x)"
+                   description="Balanced 4X mutinies driven by bankruptcy, siege losses, T-score, spice wealth, and frontier distance (Zealots immune)."
                    defaultChecked="true">Rebellion_Enabled.package</component>
         <component unique="Rebellion_Anarchy"
                    displayName="Anarchy (2.0x)"
                    description="Double rebellion frequency across the galaxy.">Rebellion_Anarchy.package</component>
+    </componentGroup>
+
+    <componentGroup unique="FleetUpkeepGroup" displayName="Fleet Upkeep">
+        <component unique="Upkeep_Disabled"
+                   displayName="Free (0.0x)"
+                   description="No periodic garrison maintenance costs in peacetime.">Upkeep_00x.package</component>
+        <component unique="Upkeep_Low"
+                   displayName="Subsidized (0.5x)"
+                   description="Light garrison upkeep every 3 minutes; rare spices easily cover maintenance.">Upkeep_05x.package</component>
+        <component unique="Upkeep_Normal"
+                   displayName="Standard (1.0x)"
+                   description="Balanced 4X upkeep every 2.5 minutes: purple/pink spice worlds pay for themselves, while poor T0/T1 outposts drain treasury."
+                   defaultChecked="true">Upkeep_10x.package</component>
+        <component unique="Upkeep_Harsh"
+                   displayName="Heavy (2.0x)"
+                   description="High maintenance every 2 minutes: overextended empires without spice trade quickly face debt and mutinies.">Upkeep_20x.package</component>
+    </componentGroup>
+
+    <componentGroup unique="CityUnrestGroup" displayName="City Unrest Impact">
+        <component unique="Unrest_Disabled"
+                   displayName="Ignored (0.0x)"
+                   description="Unhappy citizens and unentertained factories do not affect shipyards or trigger peacetime uprisings.">Unrest_00x.package</component>
+        <component unique="Unrest_Low"
+                   displayName="Mild (0.5x)"
+                   description="Reduced impact of city strikes and factory overload on garrison loyalty.">Unrest_05x.package</component>
+        <component unique="Unrest_Normal"
+                   displayName="Standard (1.0x)"
+                   description="Unhappy cities and factory-heavy sweatshops slow down shipyards and can spark peacetime orbital civil wars."
+                   defaultChecked="true">Unrest_10x.package</component>
+        <component unique="Unrest_High"
+                   displayName="Volatile (2.0x)"
+                   description="Severe labor strikes: neglecting city entertainment rapidly provokes garrison defection.">Unrest_20x.package</component>
     </componentGroup>
 
 </mod>
