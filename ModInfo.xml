@@ -1,6 +1,6 @@
 <mod unique="Defensive_Ships_In_Player_Colonies"
      displayName="Defensive Ships in Player Colonies"
-     description="Dynamically deploys defensive fleets, scalable planetary garrisons, 4X upkeep logistics, city unrest scanning, and colonial mutiny mechanics."
+     description="Dynamically deploys defensive fleets, 4X fleet upkeep, colony gadget synergies, and orbital mutiny mechanics."
      installerSystemVersion="1.0.1.2"
      hasCustomInstaller="true"
      dllsBuild="$SPOREMOD_DLLS_BUILD"
@@ -30,49 +30,65 @@
     <componentGroup unique="ColonialRebellionsGroup" displayName="Colonial Rebellions">
         <component unique="Rebellion_Disabled"
                    displayName="Disabled (0.0x)"
-                   description="Disables all garrison mutinies and civil wars across both player and NPC worlds.">Rebellion_Disabled.package</component>
+                   description="No garrison mutinies or peacetime uprisings under any circumstances.">Rebellion_Disabled.package</component>
         <component unique="Rebellion_Low"
                    displayName="Stable (0.5x)"
-                   description="Half mutiny frequency: rebellions occur mostly on harsh, bankrupt frontier T0/T1 outposts.">Rebellion_Low.package</component>
+                   description="Reduced mutiny probability across all colonies and NPC worlds.">Rebellion_Low.package</component>
         <component unique="Rebellion_Enabled"
                    displayName="Standard (1.0x)"
-                   description="Balanced 4X mutinies driven by bankruptcy, siege losses, T-score, spice wealth, and frontier distance (Zealots immune)."
+                   description="Full 4X unrest: mutinies from bankruptcy, siege losses, frontier distance, and strikes."
                    defaultChecked="true">Rebellion_Enabled.package</component>
         <component unique="Rebellion_Anarchy"
                    displayName="Anarchy (2.0x)"
-                   description="Double rebellion frequency across the galaxy.">Rebellion_Anarchy.package</component>
+                   description="Double rebellion and civil war frequency across the galaxy.">Rebellion_Anarchy.package</component>
     </componentGroup>
 
     <componentGroup unique="FleetUpkeepGroup" displayName="Fleet Upkeep">
-        <component unique="Upkeep_Disabled"
-                   displayName="Free (0.0x)"
-                   description="No periodic garrison maintenance costs in peacetime.">Upkeep_00x.package</component>
-        <component unique="Upkeep_Low"
-                   displayName="Subsidized (0.5x)"
-                   description="Light garrison upkeep every 3 minutes; rare spices easily cover maintenance.">Upkeep_05x.package</component>
-        <component unique="Upkeep_Normal"
+        <component unique="Upkeep_00x"
+                   displayName="Disabled (0.0x)"
+                   description="Free peacetime garrisons with zero periodic maintenance costs.">Upkeep_00x.package</component>
+        <component unique="Upkeep_05x"
+                   displayName="Low (0.5x)"
+                   description="Light maintenance every 4 minutes; high spice self-sufficiency.">Upkeep_05x.package</component>
+        <component unique="Upkeep_10x"
                    displayName="Standard (1.0x)"
-                   description="Balanced 4X upkeep every 2.5 minutes: purple/pink spice worlds pay for themselves, while poor T0/T1 outposts drain treasury."
+                   description="Balanced payroll every 3 minutes; rare spices offset local garrison costs."
                    defaultChecked="true">Upkeep_10x.package</component>
-        <component unique="Upkeep_Harsh"
-                   displayName="Heavy (2.0x)"
-                   description="High maintenance every 2 minutes: overextended empires without spice trade quickly face debt and mutinies.">Upkeep_20x.package</component>
+        <component unique="Upkeep_20x"
+                   displayName="Hardcore (2.0x)"
+                   description="Heavy military budget every 2 minutes; poor outposts drain the treasury fast.">Upkeep_20x.package</component>
     </componentGroup>
 
     <componentGroup unique="CityUnrestGroup" displayName="City Unrest Impact">
-        <component unique="Unrest_Disabled"
+        <component unique="Unrest_00x"
                    displayName="Ignored (0.0x)"
-                   description="Unhappy citizens and unentertained factories do not affect shipyards or trigger peacetime uprisings.">Unrest_00x.package</component>
-        <component unique="Unrest_Low"
+                   description="Unhappy citizens and factory sweatshops never affect shipyards or loyalty.">Unrest_00x.package</component>
+        <component unique="Unrest_05x"
                    displayName="Mild (0.5x)"
-                   description="Reduced impact of city strikes and factory overload on garrison loyalty.">Unrest_05x.package</component>
-        <component unique="Unrest_Normal"
+                   description="Minor shipyard slowdowns and low uprising chance from unhappy cities.">Unrest_05x.package</component>
+        <component unique="Unrest_10x"
                    displayName="Standard (1.0x)"
-                   description="Unhappy cities and factory-heavy sweatshops slow down shipyards and can spark peacetime orbital civil wars."
+                   description="Factory strikes slow shipyards and risk peacetime orbital civil wars."
                    defaultChecked="true">Unrest_10x.package</component>
-        <component unique="Unrest_High"
+        <component unique="Unrest_20x"
                    displayName="Volatile (2.0x)"
-                   description="Severe labor strikes: neglecting city entertainment rapidly provokes garrison defection.">Unrest_20x.package</component>
+                   description="Neglected factory colonies rapidly erupt into full-scale orbital mutinies.">Unrest_20x.package</component>
+    </componentGroup>
+
+    <componentGroup unique="ColonyGadgetsGroup" displayName="Colony Gadgets">
+        <component unique="Gadget_00x"
+                   displayName="Vanilla (0.0x)"
+                   description="Disable custom bonuses from Loyalty/Happiness Boosters, Uber Turret, and ship tools.">Gadget_00x.package</component>
+        <component unique="Gadget_05x"
+                   displayName="Moderate (0.5x)"
+                   description="Half-strength bonuses from planetary colonization modules and pacification tools.">Gadget_05x.package</component>
+        <component unique="Gadget_10x"
+                   displayName="Standard (1.0x)"
+                   description="Full synergy with Loyalty/Happiness Boosters, Uber Turret, Spice Storage, Bio-Domes, and Mind Erase."
+                   defaultChecked="true">Gadget_10x.package</component>
+        <component unique="Gadget_15x"
+                   displayName="Amplified (1.5x)"
+                   description="Boosted shield coordination, upkeep discounts, and rebellion suppression from gadgets.">Gadget_15x.package</component>
     </componentGroup>
 
 </mod>
