@@ -3,6 +3,7 @@
 #include <Spore\Simulator\Serialization.h>
 #include <Spore\BasicIncludes.h>
 #include <Spore\Simulator\cCity.h>
+#include <Spore\Simulator\cBuilding.h>
 #include <EASTL\vector.h>
 #include <EASTL\map.h>
 
@@ -43,19 +44,20 @@ public:
 	int CalculateEmpireFleetUpkeep(Simulator::cEmpire* empire);
 	float GetSpiceBasePrice(Simulator::cPlanetRecord* planet);
 	int CalculateShipBuildCost(Simulator::cEmpire* empire);
+	float GetPlanetaryCityUnrestFactor(Simulator::cPlanetRecord* planet);
 
 	int GetMaxDefenders(Simulator::cPlanetRecord* planet);
 	int GetPeacePatrolCount(Simulator::cPlanetRecord* planet);
 	int GetColonyCount(Simulator::cPlanetRecord* planet);
 	int GetTurretCount(Simulator::cPlanetRecord* planet);
-	float GetPlanetaryCityUnrestFactor(Simulator::cPlanetRecord* planet);
 	int GetSpawnBatch(Simulator::cPlanetRecord* planet);
 	int GetDynamicReinforceTime(Simulator::cPlanetRecord* planet);
 	float CalculateShipHealth(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
 	bool IsPlanetUnderAttack(Simulator::cPlanetRecord* planet);
 	bool ShouldTriggerRebellion(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool isPeacetimeCheck = false);
+	void TryTriggerColonialUprising(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
 
-	Simulator::cGameDataUFO* SpawnDefensiveShip(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool canRebel = false, bool isPeacetimeCheck = false);
+	Simulator::cGameDataUFO* SpawnDefensiveShip(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool canRebel = false);
 	
 	void ManagePlanetDefenders(Simulator::cPlanetRecord* planet);
 	void DecreaseDefendersOnPlanet(Simulator::cPlanetRecord* planet);
@@ -69,20 +71,21 @@ private:
 
 	int elapsedTime;
 	int reinforceTime;
-	int lastUpkeepTime;
-	int lastPeacetimeCheckTime;
 	int playerColonyDefenders;
 	int playerHomeworldDefenders;
 	int playerOutpostDefenders;
 	int softCapThreshold;
 	int reserveToMobilize;
+	int lastMobilizeTime;
 
-	// Динамические множители из XML / .prop конфигов установщика (без хардкода)
-	float configFleetMultiplier;      // FleetConfig.prop (0x07A1BC01)
-	float configRebellionMultiplier;  // RebellionConfig.prop (0x07A1BC02)
-	float configUpkeepMultiplier;     // UpkeepConfig.prop (0x07A1BC03): 0.0x = выкл, 0.5x, 1.0x, 2.0x
-	float configCityUnrestMultiplier; // UnrestConfig.prop (0x07A1BC04): влияние бастующих городов и заводов
-	int upkeepIntervalMs;             // UpkeepConfig.prop (0x07A1BC05): интервал жалования флоту (по умолч. 180000 мс)
+	int upkeepIntervalMs;
+	int lastUpkeepTime;
+	int unpaidUpkeepCycles;
+
+	float configFleetMultiplier;
+	float configRebellionMultiplier;
+	float configUpkeepMultiplier;
+	float configCityUnrestMultiplier;
 
 	cPlanetRecordPtr lastActivePlanet;
 
@@ -95,5 +98,6 @@ private:
 	eastl::map<cPlanetRecordPtr, int> planetDefenderShips;
 	eastl::map<cPlanetRecordPtr, int> planetColonyCounts;
 	eastl::map<cPlanetRecordPtr, int> planetTurretCounts;
+	eastl::map<cPlanetRecordPtr, float> planetUnrestCache;
 	eastl::map<cPlanetRecordPtr, int> planetRebelCooldowns;
 };
