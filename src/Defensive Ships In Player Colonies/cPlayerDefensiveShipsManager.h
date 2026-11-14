@@ -40,6 +40,7 @@ public:
 
 	int GetDynamicSoftCap(Simulator::cEmpire* empire);
 	int GetDynamicMaxTreasury(Simulator::cEmpire* empire);
+	int CalculateEmpireFleetUpkeep(Simulator::cEmpire* empire);
 	float GetSpiceBasePrice(Simulator::cPlanetRecord* planet);
 	int CalculateShipBuildCost(Simulator::cEmpire* empire);
 
@@ -47,13 +48,14 @@ public:
 	int GetPeacePatrolCount(Simulator::cPlanetRecord* planet);
 	int GetColonyCount(Simulator::cPlanetRecord* planet);
 	int GetTurretCount(Simulator::cPlanetRecord* planet);
+	float GetPlanetaryCityUnrestFactor(Simulator::cPlanetRecord* planet);
 	int GetSpawnBatch(Simulator::cPlanetRecord* planet);
 	int GetDynamicReinforceTime(Simulator::cPlanetRecord* planet);
 	float CalculateShipHealth(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
 	bool IsPlanetUnderAttack(Simulator::cPlanetRecord* planet);
-	bool ShouldTriggerRebellion(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
+	bool ShouldTriggerRebellion(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool isPeacetimeCheck = false);
 
-	Simulator::cGameDataUFO* SpawnDefensiveShip(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool canRebel = false);
+	Simulator::cGameDataUFO* SpawnDefensiveShip(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool canRebel = false, bool isPeacetimeCheck = false);
 	
 	void ManagePlanetDefenders(Simulator::cPlanetRecord* planet);
 	void DecreaseDefendersOnPlanet(Simulator::cPlanetRecord* planet);
@@ -61,20 +63,26 @@ public:
 	int GetDefendersOnPlanet(Simulator::cPlanetRecord* planet);
 
 private:
-	static cPlayerDefensiveShipsManager* instance;
+	bool IsPlanetQueuedForReinforcement(Simulator::cPlanetRecord* planet) const;
 
-	void ScheduleReinforcement(Simulator::cPlanetRecord* planet);
+	static cPlayerDefensiveShipsManager* instance;
 
 	int elapsedTime;
 	int reinforceTime;
+	int lastUpkeepTime;
+	int lastPeacetimeCheckTime;
 	int playerColonyDefenders;
 	int playerHomeworldDefenders;
 	int playerOutpostDefenders;
 	int softCapThreshold;
 	int reserveToMobilize;
-	int lastMobilizeTime;
-	float configFleetMultiplier;
-	float configRebellionMultiplier;
+
+	// Динамические множители из XML / .prop конфигов установщика (без хардкода)
+	float configFleetMultiplier;      // FleetConfig.prop (0x07A1BC01)
+	float configRebellionMultiplier;  // RebellionConfig.prop (0x07A1BC02)
+	float configUpkeepMultiplier;     // UpkeepConfig.prop (0x07A1BC03): 0.0x = выкл, 0.5x, 1.0x, 2.0x
+	float configCityUnrestMultiplier; // UnrestConfig.prop (0x07A1BC04): влияние бастующих городов и заводов
+	int upkeepIntervalMs;             // UpkeepConfig.prop (0x07A1BC05): интервал жалования флоту (по умолч. 180000 мс)
 
 	cPlanetRecordPtr lastActivePlanet;
 
@@ -87,4 +95,5 @@ private:
 	eastl::map<cPlanetRecordPtr, int> planetDefenderShips;
 	eastl::map<cPlanetRecordPtr, int> planetColonyCounts;
 	eastl::map<cPlanetRecordPtr, int> planetTurretCounts;
+	eastl::map<cPlanetRecordPtr, int> planetRebelCooldowns;
 };
