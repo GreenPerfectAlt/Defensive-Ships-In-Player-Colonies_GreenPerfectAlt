@@ -218,29 +218,58 @@ jobs:
 
       - name: Build Configuration Packages
         run: |
-          mkdir -p config_fleet/SpaceCombat~
-          
           # 1. Пакеты масштабирования флота (0.2x, 0.5x, 1.0x, 1.3x, 1.5x)
+          mkdir -p config_fleet/SpaceCombat~
           for mult in 0.2 0.5 1.0 1.3 1.5; do
             tag=$(echo "$mult" | tr -d '.')
             printf "float 0x07A1BC01 %s\n" "$mult" > config_fleet/SpaceCombat~/FleetConfig.prop.txt
             java -jar "SporeModder FX/SporeModderFX.jar" pack config_fleet "${{ github.workspace }}/Sporemod/Fleet_${tag}x.package"
           done
 
+          # 2. Пакеты восстаний (Disabled = 0.0, Low = 0.5, Enabled = 1.0, Anarchy = 2.0)
           mkdir -p config_rebel/SpaceCombat~
 
-          # 2. Пакеты восстаний (Disabled = 0.0, Enabled = 1.0, Anarchy = 2.0)
-          # Disabled
           printf "float 0x07A1BC02 0.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebellion_Disabled.package"
 
-          # Enabled
+          printf "float 0x07A1BC02 0.5\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebellion_Low.package"
+
           printf "float 0x07A1BC02 1.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebellion_Enabled.package"
 
-          # Anarchy
           printf "float 0x07A1BC02 2.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebellion_Anarchy.package"
+
+          # 3. Пакеты содержания флота UpkeepConfig (0x07A1BC03 = mult, 0x07A1BC05 = intervalSeconds)
+          mkdir -p config_upkeep/SpaceCombat~
+
+          printf "float 0x07A1BC03 0.0\nfloat 0x07A1BC05 180.0\n" > config_upkeep/SpaceCombat~/UpkeepConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_upkeep "${{ github.workspace }}/Sporemod/Upkeep_00x.package"
+
+          printf "float 0x07A1BC03 0.5\nfloat 0x07A1BC05 240.0\n" > config_upkeep/SpaceCombat~/UpkeepConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_upkeep "${{ github.workspace }}/Sporemod/Upkeep_05x.package"
+
+          printf "float 0x07A1BC03 1.0\nfloat 0x07A1BC05 180.0\n" > config_upkeep/SpaceCombat~/UpkeepConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_upkeep "${{ github.workspace }}/Sporemod/Upkeep_10x.package"
+
+          printf "float 0x07A1BC03 2.0\nfloat 0x07A1BC05 120.0\n" > config_upkeep/SpaceCombat~/UpkeepConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_upkeep "${{ github.workspace }}/Sporemod/Upkeep_20x.package"
+
+          # 4. Пакеты влияния забастовок и заводов UnrestConfig (0x07A1BC04 = mult)
+          mkdir -p config_unrest/SpaceCombat~
+
+          printf "float 0x07A1BC04 0.0\n" > config_unrest/SpaceCombat~/UnrestConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_unrest "${{ github.workspace }}/Sporemod/Unrest_00x.package"
+
+          printf "float 0x07A1BC04 0.5\n" > config_unrest/SpaceCombat~/UnrestConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_unrest "${{ github.workspace }}/Sporemod/Unrest_05x.package"
+
+          printf "float 0x07A1BC04 1.0\n" > config_unrest/SpaceCombat~/UnrestConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_unrest "${{ github.workspace }}/Sporemod/Unrest_10x.package"
+
+          printf "float 0x07A1BC04 2.0\n" > config_unrest/SpaceCombat~/UnrestConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_unrest "${{ github.workspace }}/Sporemod/Unrest_20x.package"
 
       - name: Find latest ModAPI DLLs build
         id: find-latest-dlls-build
