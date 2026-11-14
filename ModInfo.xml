@@ -90,5 +90,21 @@
                    displayName="Amplified (1.5x)"
                    description="Boosted shield coordination, upkeep discounts, and rebellion suppression from gadgets.">Gadget_15x.package</component>
     </componentGroup>
-
+     
+    <componentGroup unique="GalacticTradeGroup" displayName="Galactic Trade">
+        <component unique="Trade_00x"
+                   displayName="Disabled (0.0x)"
+                   description="Disable dynamic AI trade routes, spice arbitrage profits, and 3D freighter convoys.">Trade_00x.package</component>
+        <component unique="Trade_05x"
+                   displayName="Modest (0.5x)"
+                   description="Conservative trade income, mild spice arbitrage, and up to 3 routes per empire.">Trade_05x.package</component>
+        <component unique="Trade_10x"
+                   displayName="Standard (1.0x)"
+                   description="Balanced 4X trade network: spice price arbitrage, blockade unrest, war shock, and 3D convoys."
+                   defaultChecked="true">Trade_10x.package</component>
+        <component unique="Trade_15x"
+                   displayName="Booming (1.5x)"
+                   description="High-yield spice arbitrage, strong trade peace deterrence, and up to 8 routes per empire.">Trade_15x.package</component>
+    </componentGroup>
+     
 </mod>
