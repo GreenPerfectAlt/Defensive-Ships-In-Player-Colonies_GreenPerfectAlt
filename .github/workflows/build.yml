@@ -259,6 +259,20 @@ jobs:
             java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_${tag}x.package"
           done
 
+          mkdir -p config_trade/SpaceCombat~
+          printf "float 0x07A1BC07 0.0\nfloat 0x07A1BC08 0.0\nfloat 0x07A1BC09 0.0\nfloat 0x07A1BC0A 1.0\nfloat 0x07A1BC0B 2.0\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_00x.package"
+
+          printf "float 0x07A1BC07 0.5\nfloat 0x07A1BC08 0.7\nfloat 0x07A1BC09 0.6\nfloat 0x07A1BC0A 3.0\nfloat 0x07A1BC0B 2.0\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_05x.package"
+
+          printf "float 0x07A1BC07 1.0\nfloat 0x07A1BC08 1.0\nfloat 0x07A1BC09 1.0\nfloat 0x07A1BC0A 5.0\nfloat 0x07A1BC0B 2.0\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_10x.package"
+
+          printf "float 0x07A1BC07 1.5\nfloat 0x07A1BC08 1.5\nfloat 0x07A1BC09 1.5\nfloat 0x07A1BC0A 8.0\nfloat 0x07A1BC0B 2.0\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_15x.package"
+
+
       - name: Find latest ModAPI DLLs build
         id: find-latest-dlls-build
         uses: oprypin/find-latest-tag@v1
