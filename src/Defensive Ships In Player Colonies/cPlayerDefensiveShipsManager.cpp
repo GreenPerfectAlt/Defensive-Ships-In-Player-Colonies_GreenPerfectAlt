@@ -117,7 +117,17 @@ void cPlayerDefensiveShipsManager::Initialize() {
 	if (configCityUnrestMultiplier < 0.0f || configCityUnrestMultiplier > 5.0f) {
 		configCityUnrestMultiplier = 1.0f;
 	}
+
+	// 5. Множитель стационарных построек и приборов из GadgetConfig.prop (0.0x - 1.5x)
+	PropertyListPtr propListGadget;
+	if (PropManager.GetPropertyList(id(u"GadgetConfig"), 0x02ae0c7e, propListGadget) && propListGadget != nullptr) {
+		App::Property::GetFloat(propListGadget.get(), 0x07A1BC06, configGadgetMultiplier);
+	}
+	if (configGadgetMultiplier < 0.0f || configGadgetMultiplier > 5.0f) {
+		configGadgetMultiplier = 1.0f;
+	}
 }
+
 
 void cPlayerDefensiveShipsManager::Dispose() {
 	MessageManager.RemoveListener(this, SimulatorMessages::kMsgCombatantKilled);
@@ -134,6 +144,76 @@ bool cPlayerDefensiveShipsManager::IsPlanetQueuedForReinforcement(cPlanetRecord*
 		}
 	}
 	return false;
+}
+
+static bool MatchGadgetKey(uint32_t idVal, const char* n1, const char* n2, const char* n3 = nullptr, uint32_t raw1 = 0, uint32_t raw2 = 0) {
+	if (idVal == 0) return false;
+	if (n1 && idVal == id(n1)) return true;
+	if (n2 && idVal == id(n2)) return true;
+	if (n3 && idVal == id(n3)) return true;
+	if (raw1 != 0 && idVal == raw1) return true;
+	if (raw2 != 0 && idVal == raw2) return true;
+	return false;
+}
+
+PlanetaryGadgetState cPlayerDefensiveShipsManager::GetPlanetGadgetState(cPlanetRecord* planet) {
+	PlanetaryGadgetState state;
+	if (!planet || configGadgetMultiplier <= 0.01f) return state;
+
+	// На орбите сканируем реальные размещенные объекты планеты и их здоровье (cCombatant + cGameData)
+	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
+		const auto& combatants = GetDataByCast<cCombatant>();
+		for (const auto& comb : combatants) {
+			if (!comb || comb->mHealthPoints <= 0.0f) continue;
+
+			cSpatialObject* spatial = object_cast<cSpatialObject>(comb.get());
+			if (!spatial) continue;
+
+			uint32_t modelId = spatial->GetModelKey().instanceID;
+			if (MatchGadgetKey(modelId, "loyaltybooster", "b_loyaltybooster", "pl_loyalty_booster", 0x04668B8A, 0x03F3E4A1)) {
+				state.hasLoyaltyBooster = true;
+			} else if (MatchGadgetKey(modelId, "happinessbooster", "b_happinessbooster", "pl_happiness_booster", 0x04668B89, 0x03F3E4A0)) {
+				state.hasHappinessBooster = true;
+			} else if (MatchGadgetKey(modelId, "uberturret", "b_uberturret", "super_turret", 0x0246F65C, 0x04668B8B)) {
+				state.hasUberTurret = true;
+			} else if (MatchGadgetKey(modelId, "spicestorage", "b_spicestorage", "pl_spice_storage", 0x04668B8C, 0x03F3E4A2)) {
+				state.hasSpiceStorage = true;
+			} else if (MatchGadgetKey(modelId, "bioprotector", "biostabilizer", "b_bioprotector", 0x04668B87, 0x04668B88)) {
+				state.hasBioProtector = true;
+			}
+		}
+
+		// Также проверяем мирные планетарные гаджеты через cSpatialObject (если у них нет ХП cCombatant)
+		const auto& spatials = GetDataByCast<cSpatialObject>();
+		for (const auto& sp : spatials) {
+			if (!sp) continue;
+			cCombatant* asComb = object_cast<cCombatant>(sp.get());
+			if (asComb && asComb->mHealthPoints <= 0.0f) continue;
+
+			uint32_t modelId = sp->GetModelKey().instanceID;
+			if (MatchGadgetKey(modelId, "loyaltybooster", "b_loyaltybooster", "pl_loyalty_booster", 0x04668B8A, 0x03F3E4A1)) {
+				state.hasLoyaltyBooster = true;
+			} else if (MatchGadgetKey(modelId, "happinessbooster", "b_happinessbooster", "pl_happiness_booster", 0x04668B89, 0x03F3E4A0)) {
+				state.hasHappinessBooster = true;
+			} else if (MatchGadgetKey(modelId, "uberturret", "b_uberturret", "super_turret", 0x0246F65C, 0x04668B8B)) {
+				state.hasUberTurret = true;
+			} else if (MatchGadgetKey(modelId, "spicestorage", "b_spicestorage", "pl_spice_storage", 0x04668B8C, 0x03F3E4A2)) {
+				state.hasSpiceStorage = true;
+			} else if (MatchGadgetKey(modelId, "bioprotector", "biostabilizer", "b_bioprotector", 0x04668B87, 0x04668B88)) {
+				state.hasBioProtector = true;
+			}
+		}
+
+		planetGadgetCache[cPlanetRecordPtr(planet)] = state;
+		return state;
+	}
+
+	auto it = planetGadgetCache.find(planet);
+	if (it != planetGadgetCache.end()) {
+		return it->second;
+	}
+
+	return state;
 }
 
 int cPlayerDefensiveShipsManager::GetDynamicSoftCap(cEmpire* empire) {
@@ -174,6 +254,7 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 
 	int starCount = static_cast<int>(empire->mStars.size());
 	float spiceOutputWeight = 0.0f;
+	int storageCount = 0;
 
 	for (const auto& star : empire->mStars) {
 		if (!star) continue;
@@ -188,13 +269,18 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 			else if (pl->mType == PlanetType::T1) tFactor = 0.7f;
 
 			spiceOutputWeight += (pSpice / 300.0f) * tFactor * 12000.0f;
+
+			if (GetPlanetGadgetState(pl.get()).hasSpiceStorage) {
+				storageCount++;
+			}
 		}
 	}
 
 	int arch = empire->mArchetype;
 	float bankMult = (arch == 5 || arch == 15) ? 1.75f : 1.0f;
+	float storageBonus = static_cast<float>(storageCount) * 40000.0f * configGadgetMultiplier;
 
-	int dynamicCap = static_cast<int>(round((80000.0f + starCount * 30000.0f + spiceOutputWeight) * bankMult));
+	int dynamicCap = static_cast<int>(round((80000.0f + starCount * 30000.0f + storageBonus + spiceOutputWeight) * bankMult));
 	return max(dynamicCap, 100000);
 }
 
@@ -241,6 +327,11 @@ int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
 			int garrisonSize = GetMaxDefenders(pl.get());
 			float rawPlanetUpkeep = static_cast<float>(garrisonSize) * 45.0f;
 
+			if (GetPlanetGadgetState(pl.get()).hasSpiceStorage) {
+				float discount = min(0.50f * configGadgetMultiplier, 0.85f);
+				rawPlanetUpkeep *= (1.0f - discount);
+			}
+
 			// Самоокупаемость за счет ценности местной пряности
 			float spicePrice = GetSpiceBasePrice(pl.get());
 			float spiceOffsetRatio = 0.25f; // Дешевая красная/желтая покрывает лишь 25% расходов охраны
@@ -271,6 +362,13 @@ float cPlayerDefensiveShipsManager::GetPlanetaryCityUnrestFactor(cPlanetRecord* 
 		return 0.0f;
 	}
 
+	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
+	if (gadgets.hasHappinessBooster) {
+		planetUnrestCache[cPlanetRecordPtr(planet)] = 0.0f;
+		return 0.0f;
+	}
+
+	float rawUnrest = -1.0f;
 	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
 		int totalCities = 0;
 		int totalUnhappy = 0;
@@ -296,27 +394,34 @@ float cPlayerDefensiveShipsManager::GetPlanetaryCityUnrestFactor(cPlanetRecord* 
 
 		float unrest = 0.0f;
 		if (totalCities > 0) {
-			// Прямая забастовка недовольных жителей в ратушах
 			float avgUnhappy = static_cast<float>(totalUnhappy) / static_cast<float>(totalCities);
 			unrest += avgUnhappy * 0.28f;
 
-			// Промышленная эксплуатация: заводы без развлекательных центров копят напряжение
 			int excessFactories = totalFactories - (totalEntertainment * 2) - totalCities;
 			if (excessFactories > 0) {
 				unrest += min(static_cast<float>(excessFactories) * 0.08f, 0.50f);
 			}
 		}
 
-		unrest = min(unrest * configCityUnrestMultiplier, 1.50f);
-		planetUnrestCache[cPlanetRecordPtr(planet)] = unrest;
-		return unrest;
+		rawUnrest = min(unrest * configCityUnrestMultiplier, 1.50f);
+		planetUnrestCache[cPlanetRecordPtr(planet)] = rawUnrest;
 	}
 
-	auto it = planetUnrestCache.find(planet);
-	if (it != planetUnrestCache.end()) {
-		return it->second;
+	if (rawUnrest < 0.0f) {
+		auto it = planetUnrestCache.find(planet);
+		rawUnrest = (it != planetUnrestCache.end()) ? it->second : 0.0f;
 	}
-	return 0.0f;
+
+	if (gadgets.hasBioProtector && rawUnrest > 0.0f) {
+		cEmpire* emp = GetPlayerEmpire();
+		int arch = emp ? emp->mArchetype : 0;
+		if (arch == 4 || arch == 6 || arch == 8 || arch == 14 || arch == 16 || arch == 18) {
+			float bioRelief = min(0.30f * configGadgetMultiplier, 0.80f);
+			rawUnrest *= (1.0f - bioRelief);
+		}
+	}
+
+	return rawUnrest;
 }
 
 bool cPlayerDefensiveShipsManager::IsPlanetUnderAttack(cPlanetRecord* planet) {
@@ -360,6 +465,9 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 	if (arch == 2 || arch == 12 || arch == 10) {
 		return false;
 	}
+
+	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
+
 
 	// 2. Триггеры кризиса: пустая казна, задолженность по жалованию, забастовка городов или потери в бою
 	int maxTreasury = GetDynamicMaxTreasury(empire);
@@ -450,6 +558,10 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 	if (turretCount >= 12) {
 		garrisonControlFactor *= 0.85f;
 	}
+	if (gadgets.hasUberTurret) {
+		garrisonControlFactor *= 0.80f;
+	}
+
 
 	// 7. Дистанция от столицы по философии
 	float distanceFactor = 1.0f;
@@ -475,14 +587,20 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 	}
 
 	float finalChance = rebellionChance * planetTierFactor * spiceStabilityFactor * garrisonControlFactor * distanceFactor * configRebellionMultiplier;
+	if (gadgets.hasLoyaltyBooster) {
+		float suppression = min(0.90f * configGadgetMultiplier, 0.98f);
+		finalChance *= (1.0f - suppression);
+	}
 	finalChance = min(max(finalChance, 0.0f), 0.90f);
 
 	return (Math::randf() < finalChance);
 }
 
+
 void cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* planet, cEmpire* empire) {
 	if (!planet || !empire || configRebellionMultiplier <= 0.01f) return;
 	if (GetCurrentContext() != SpaceContext::Planet || planet != GetActivePlanetRecord()) return;
+	if (GetPlanetGadgetState(planet).hasLoyaltyBooster) return;
 
 	// Проверка кулдауна (не чаще раза в 4 минуты на одной и той же колонии)
 	auto itCd = planetRebelCooldowns.find(planet);
@@ -535,6 +653,90 @@ void cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* pla
 	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 240000;
 }
 
+void cPlayerDefensiveShipsManager::TriggerBoosterDestroyedBacklash(cPlanetRecord* planet, cEmpire* empire) {
+	if (!planet || !empire || configRebellionMultiplier <= 0.01f) return;
+
+	int arch = empire->mArchetype;
+	if (arch == 2 || arch == 12 || arch == 10) return;
+
+	eastl::vector<cGameDataUFO*> loyalDefenders;
+	const auto& ufos = GetData<cGameDataUFO>();
+	for (const auto& ufo : ufos) {
+		if (ufo && ufo->mHealthPoints > 0 &&
+		    ufo->mPoliticalID == empire->GetEmpireID() &&
+		    ufo->mUFOType == static_cast<int>(UfoType::Defender)) {
+			loyalDefenders.push_back(ufo.get());
+		}
+	}
+
+	int defectCount = eastl::max<int>(1, static_cast<int>(loyalDefenders.size()) / 2);
+	for (int i = 0; i < defectCount && i < static_cast<int>(loyalDefenders.size()); ++i) {
+		loyalDefenders[i]->mPoliticalID = 0xFFFFFFFF;
+		loyalDefenders[i]->mUFOType = static_cast<int>(UfoType::Bomber);
+		DecreaseDefendersOnPlanet(planet);
+	}
+}
+
+int cPlayerDefensiveShipsManager::PacifyRebelsOnActivePlanet(cPlanetRecord* planet, cEmpire* empire, float pacifyRatio) {
+	if (!planet || !empire || pacifyRatio <= 0.0f) return 0;
+
+	eastl::vector<cGameDataUFO*> activeRebels;
+	const auto& ufos = GetData<cGameDataUFO>();
+	for (const auto& ufo : ufos) {
+		if (ufo && ufo->mHealthPoints > 0 &&
+		    ufo->mPoliticalID == 0xFFFFFFFF &&
+		    ufo->mUFOType == static_cast<int>(UfoType::Bomber)) {
+			activeRebels.push_back(ufo.get());
+		}
+	}
+
+	if (activeRebels.empty()) return 0;
+
+	int toPacify = static_cast<int>(std::ceil(static_cast<float>(activeRebels.size()) * pacifyRatio));
+	toPacify = eastl::min<int>(toPacify, static_cast<int>(activeRebels.size()));
+
+	int maxDef = GetMaxDefenders(planet);
+	int pacified = 0;
+
+	for (int i = 0; i < toPacify; ++i) {
+		activeRebels[i]->mPoliticalID = empire->mPoliticalID;
+		activeRebels[i]->mUFOType = static_cast<int>(UfoType::Defender);
+		pacified++;
+
+		auto it = planetDefenderShips.find(planet);
+		if (it != planetDefenderShips.end()) {
+			it->second = eastl::min<int>(it->second + 1, maxDef);
+		}
+	}
+
+	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 180000;
+	return pacified;
+}
+
+void cPlayerDefensiveShipsManager::OnPlayerToolUsed(cSpaceToolData* toolData) {
+	if (!toolData || !IsSpaceGame() || configGadgetMultiplier <= 0.01f) return;
+	if (GetCurrentContext() != SpaceContext::Planet) return;
+
+	cPlanetRecord* activePlanet = GetActivePlanetRecord();
+	cEmpire* playerEmpire = GetPlayerEmpire();
+	if (!activePlanet || !playerEmpire || !activePlanet->GetStarRecord()) return;
+
+	uint32_t toolId = toolData->mToolId.instanceID;
+
+	// Ручное подавление мятежников приборами корабля (Стиратель памяти = 100%, Фейерверк / Луч счастья / Песнь = 50%)
+	if (activePlanet->GetStarRecord()->mEmpireID == GetPlayerEmpireID()) {
+		if (MatchGadgetKey(toolId, "minderase", "globalminderase", "tool_minderase", 0x03F3E491, 0x04668B91)) {
+			PacifyRebelsOnActivePlanet(activePlanet, playerEmpire, 1.0f);
+			planetUnrestCache[cPlanetRecordPtr(activePlanet)] = 0.0f;
+		} else if (MatchGadgetKey(toolId, "fireworks", "happyray", "superhappyray", 0x03F3E480, 0x03F3E481) ||
+		           MatchGadgetKey(toolId, "soothingsong", "tool_fireworks", "tool_happyray", 0x04668B81, 0x04668B95)) {
+			PacifyRebelsOnActivePlanet(activePlanet, playerEmpire, 0.50f);
+			auto itUn = planetUnrestCache.find(activePlanet);
+			if (itUn != planetUnrestCache.end()) itUn->second *= 0.5f;
+		}
+	}
+}
+
 void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 	if (!IsSpaceGame()) return;
 
@@ -569,6 +771,7 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 				reserveToMobilize = 0;
 			}
 			lastActivePlanet = activePlanet;
+			hadLoyaltyBoosterOnOrbit = activePlanet ? GetPlanetGadgetState(activePlanet).hasLoyaltyBooster : false;
 		}
 
 		uint32_t playerEmpID = GetPlayerEmpireID();
@@ -577,6 +780,14 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 
 			GetTurretCount(activePlanet);
 			GetPlanetaryCityUnrestFactor(activePlanet);
+
+			PlanetaryGadgetState currentGadgets = GetPlanetGadgetState(activePlanet);
+			if (hadLoyaltyBoosterOnOrbit && !currentGadgets.hasLoyaltyBooster) {
+				hadLoyaltyBoosterOnOrbit = false;
+				TriggerBoosterDestroyedBacklash(activePlanet, playerEmpire);
+			} else {
+				hadLoyaltyBoosterOnOrbit = currentGadgets.hasLoyaltyBooster;
+			}
 
 			auto itCol = planetColonyCounts.find(activePlanet);
 			int oldColonies = (itCol != planetColonyCounts.end()) ? itCol->second : 0;
@@ -631,6 +842,7 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 	} else {
 		lastActivePlanet = nullptr;
 		reserveToMobilize = 0;
+		hadLoyaltyBoosterOnOrbit = false;
 	}
 
 	for (size_t i = 0; i < planetsToReinforce.size(); ) {
@@ -660,9 +872,12 @@ void cPlayerDefensiveShipsManager::OnModeEntered(uint32_t previousModeID, uint32
 		planetDefenderShips.clear();
 		planetColonyCounts.clear();
 		planetTurretCounts.clear();
+		hadLoyaltyBoosterOnOrbit = false;
 		planetUnrestCache.clear();
 		planetRebelCooldowns.clear();
+		planetGadgetCache.clear();
 	}
+
 	cStrategy::OnModeEntered(previousModeID, newModeID);
 }
 
@@ -727,6 +942,14 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 
 	float turretBonus = static_cast<float>(GetTurretCount(planet)) * 15.0f;
 	float totalHP = baseHealth + spiceBonus + turretBonus;
+
+	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
+	if (gadgets.hasUberTurret) {
+		totalHP *= (1.0f + 0.25f * configGadgetMultiplier);
+	}
+	if (gadgets.hasBioProtector && (arch == 4 || arch == 6 || arch == 8 || arch == 14 || arch == 16 || arch == 18)) {
+		totalHP *= (1.0f + 0.15f * configGadgetMultiplier);
+	}
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
 	if (totalStars >= 3 && empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
@@ -852,7 +1075,11 @@ int cPlayerDefensiveShipsManager::GetMaxDefenders(cPlanetRecord* planet) {
 	else if (planet->mType == PlanetType::T0) baseDefenders = playerOutpostDefenders;
 
 	int rawTotal = baseDefenders + (colonyCount - 1) * stepBonus;
+	if (GetPlanetGadgetState(planet).hasSpiceStorage) {
+		rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * (1.0f + 0.25f * configGadgetMultiplier)));
+	}
 	rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * configFleetMultiplier));
+
 
 	cEmpire* empire = nullptr;
 	if (planet->GetStarRecord() && planet->GetStarRecord()->mEmpireID != 0) {
@@ -933,8 +1160,16 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 		}
 	}
 
-	// Забастовки рабочих на заводах колонии тормозят выпуск кораблей с верфей
-	float unrestSlowdown = 1.0f + GetPlanetaryCityUnrestFactor(planet) * 0.60f;
+	// Усилитель преданности подавляет стачки на верфях, а Усилитель счастья ускоряет верфи на 20%
+	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
+	float unrestSlowdown = 1.0f;
+	if (!gadgets.hasLoyaltyBooster) {
+		unrestSlowdown += GetPlanetaryCityUnrestFactor(planet) * 0.60f;
+	}
+	if (gadgets.hasHappinessBooster) {
+		unrestSlowdown *= max(0.60f, 1.0f - 0.20f * configGadgetMultiplier);
+	}
+
 
 	int dynamicTime = static_cast<int>(round(static_cast<float>(reinforceTime) * speedMultiplier * spiceSpeedFactor * treasurySpeedFactor * unrestSlowdown));
 
@@ -1033,6 +1268,7 @@ void cPlayerDefensiveShipsManager::ManagePlanetDefenders(cPlanetRecord* planet) 
 
 	GetColonyCount(planet);
 	GetPlanetaryCityUnrestFactor(planet);
+	hadLoyaltyBoosterOnOrbit = GetPlanetGadgetState(planet).hasLoyaltyBooster;
 	lastActivePlanet = planet;
 	lastMobilizeTime = elapsedTime;
 
