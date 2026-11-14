@@ -721,7 +721,7 @@ void cPlayerDefensiveShipsManager::OnPlayerToolUsed(cSpaceToolData* toolData) {
 	cEmpire* playerEmpire = GetPlayerEmpire();
 	if (!activePlanet || !playerEmpire || !activePlanet->GetStarRecord()) return;
 
-	uint32_t toolId = toolData->mId.instanceID;
+	uint32_t toolId = toolData->mItemID.instanceID;
 
 	// Ручное подавление мятежников приборами корабля (Стиратель памяти = 100%, Фейерверк / Луч счастья / Песнь = 50%)
 	if (activePlanet->GetStarRecord()->mEmpireID == GetPlayerEmpireID()) {
