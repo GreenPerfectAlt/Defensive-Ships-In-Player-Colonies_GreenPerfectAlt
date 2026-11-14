@@ -4,7 +4,6 @@
 #include <Spore\BasicIncludes.h>
 #include <Spore\Simulator\cCity.h>
 #include <Spore\Simulator\cBuilding.h>
-#include <Spore\Simulator\cSpaceToolData.h>
 #include <EASTL\vector.h>
 #include <EASTL\map.h>
 
@@ -13,21 +12,6 @@ namespace Simulator {
 	class XmlSerializer;
 }
 
-struct PlanetaryGadgetState {
-	bool hasLoyaltyBooster;
-	bool hasHappinessBooster;
-	bool hasUberTurret;
-	bool hasSpiceStorage;
-	bool hasBioProtector;
-
-	PlanetaryGadgetState()
-		: hasLoyaltyBooster(false)
-		, hasHappinessBooster(false)
-		, hasUberTurret(false)
-		, hasSpiceStorage(false)
-		, hasBioProtector(false)
-	{}
-};
 
 class cPlayerDefensiveShipsManager 
 	: public Simulator::cStrategy
@@ -55,31 +39,23 @@ public:
 
 	static cPlayerDefensiveShipsManager* Get();
 
-	// Экономика, казна и содержание
 	int GetDynamicSoftCap(Simulator::cEmpire* empire);
 	int GetDynamicMaxTreasury(Simulator::cEmpire* empire);
+	int CalculateEmpireFleetUpkeep(Simulator::cEmpire* empire);
 	float GetSpiceBasePrice(Simulator::cPlanetRecord* planet);
 	int CalculateShipBuildCost(Simulator::cEmpire* empire);
-	int CalculateEmpireFleetUpkeep(Simulator::cEmpire* empire);
+	float GetPlanetaryCityUnrestFactor(Simulator::cPlanetRecord* planet);
 
-	// Параметры планеты, городов и стационарных построек колонизации
-	PlanetaryGadgetState GetPlanetGadgetState(Simulator::cPlanetRecord* planet);
 	int GetMaxDefenders(Simulator::cPlanetRecord* planet);
 	int GetPeacePatrolCount(Simulator::cPlanetRecord* planet);
 	int GetColonyCount(Simulator::cPlanetRecord* planet);
 	int GetTurretCount(Simulator::cPlanetRecord* planet);
-	float GetPlanetaryCityUnrestFactor(Simulator::cPlanetRecord* planet);
 	int GetSpawnBatch(Simulator::cPlanetRecord* planet);
 	int GetDynamicReinforceTime(Simulator::cPlanetRecord* planet);
 	float CalculateShipHealth(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
-
-	// Бой, восстания и ручное подавление бунта приборами корабля
 	bool IsPlanetUnderAttack(Simulator::cPlanetRecord* planet);
-	bool ShouldTriggerRebellion(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
+	bool ShouldTriggerRebellion(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool isPeacetimeCheck = false);
 	void TryTriggerColonialUprising(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
-	void TriggerBoosterDestroyedBacklash(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
-	int PacifyRebelsOnActivePlanet(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, float pacifyRatio);
-	void OnPlayerToolUsed(Simulator::cSpaceToolData* toolData);
 
 	Simulator::cGameDataUFO* SpawnDefensiveShip(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool canRebel = false);
 	
@@ -95,23 +71,21 @@ private:
 
 	int elapsedTime;
 	int reinforceTime;
-	int lastMobilizeTime;
-	int lastUpkeepTime;
-	int upkeepIntervalMs;
-	int unpaidUpkeepCycles;
 	int playerColonyDefenders;
 	int playerHomeworldDefenders;
 	int playerOutpostDefenders;
 	int softCapThreshold;
 	int reserveToMobilize;
+	int lastMobilizeTime;
+
+	int upkeepIntervalMs;
+	int lastUpkeepTime;
+	int unpaidUpkeepCycles;
 
 	float configFleetMultiplier;
 	float configRebellionMultiplier;
 	float configUpkeepMultiplier;
 	float configCityUnrestMultiplier;
-	float configGadgetMultiplier;
-
-	bool hadLoyaltyBoosterOnOrbit;
 
 	cPlanetRecordPtr lastActivePlanet;
 
@@ -126,5 +100,4 @@ private:
 	eastl::map<cPlanetRecordPtr, int> planetTurretCounts;
 	eastl::map<cPlanetRecordPtr, float> planetUnrestCache;
 	eastl::map<cPlanetRecordPtr, int> planetRebelCooldowns;
-	eastl::map<cPlanetRecordPtr, PlanetaryGadgetState> planetGadgetCache;
 };
