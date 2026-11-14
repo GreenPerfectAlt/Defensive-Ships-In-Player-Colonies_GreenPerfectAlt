@@ -62,8 +62,12 @@ public:
 	int GetDynamicReinforceTime(Simulator::cPlanetRecord* planet);
 	float CalculateShipHealth(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
 	bool IsPlanetUnderAttack(Simulator::cPlanetRecord* planet);
+	PlanetaryGadgetState GetPlanetGadgetState(Simulator::cPlanetRecord* planet);
 	bool ShouldTriggerRebellion(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool isPeacetimeCheck = false);
 	void TryTriggerColonialUprising(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
+	void TriggerBoosterDestroyedBacklash(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire);
+	int PacifyRebelsOnActivePlanet(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, float pacifyRatio);
+	void OnPlayerToolUsed(Simulator::cSpaceToolData* toolData);
 
 	Simulator::cGameDataUFO* SpawnDefensiveShip(Simulator::cPlanetRecord* planet, Simulator::cEmpire* empire, bool canRebel = false);
 	
@@ -94,6 +98,9 @@ private:
 	float configRebellionMultiplier;
 	float configUpkeepMultiplier;
 	float configCityUnrestMultiplier;
+	float configGadgetMultiplier;
+
+	bool hadLoyaltyBoosterOnOrbit;
 
 	cPlanetRecordPtr lastActivePlanet;
 
@@ -108,4 +115,5 @@ private:
 	eastl::map<cPlanetRecordPtr, int> planetTurretCounts;
 	eastl::map<cPlanetRecordPtr, float> planetUnrestCache;
 	eastl::map<cPlanetRecordPtr, int> planetRebelCooldowns;
+	eastl::map<cPlanetRecordPtr, PlanetaryGadgetState> planetGadgetCache;
 };
