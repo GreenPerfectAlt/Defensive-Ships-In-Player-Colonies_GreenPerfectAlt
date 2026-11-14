@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "cPlayerDefensiveShipsManager.h"
-#include <Spore\Simulator\cBuilding.h>
+#include <Spore\Simulator\SubSystem\StarManager.h>
 #include <cmath>
 
 using namespace Simulator;
@@ -48,18 +48,17 @@ cPlayerDefensiveShipsManager::~cPlayerDefensiveShipsManager() {
 void cPlayerDefensiveShipsManager::Initialize() {
 	instance = this;
 	elapsedTime = 0;
-	lastUpkeepTime = 0;
-	lastMobilizeTime = 0;
 	reserveToMobilize = 0;
+	lastMobilizeTime = 0;
+	lastUpkeepTime = 0;
 	unpaidUpkeepCycles = 0;
-	lastActivePlanet = nullptr;
+	upkeepIntervalMs = 180000; // 3 минуты по умолчанию
 
-	// Значения по умолчанию (переопределяются через XML/prop установщика)
 	configFleetMultiplier = 1.0f;
 	configRebellionMultiplier = 1.0f;
 	configUpkeepMultiplier = 1.0f;
 	configCityUnrestMultiplier = 1.0f;
-	upkeepIntervalMs = 150000; // 2.5 минуты космического времени по умолчанию
+	lastActivePlanet = nullptr;
 
 	playerOutpostDefenders   = 5;
 	playerColonyDefenders    = 10;
@@ -95,23 +94,23 @@ void cPlayerDefensiveShipsManager::Initialize() {
 		configRebellionMultiplier = 1.0f;
 	}
 
-	// 3. Множитель содержания гарнизонов из UpkeepConfig.prop (0.0x - 2.0x) и интервал в секундах (0x07A1BC04)
+	// 3. Множитель жалования и интервала содержания из UpkeepConfig.prop (0.0x - 2.0x)
 	PropertyListPtr propListUpkeep;
 	if (PropManager.GetPropertyList(id(u"UpkeepConfig"), 0x02ae0c7e, propListUpkeep) && propListUpkeep != nullptr) {
 		App::Property::GetFloat(propListUpkeep.get(), 0x07A1BC03, configUpkeepMultiplier);
-		float intervalSec = 150.0f;
-		if (App::Property::GetFloat(propListUpkeep.get(), 0x07A1BC04, intervalSec) && intervalSec >= 20.0f) {
-			upkeepIntervalMs = static_cast<int>(intervalSec * 1000.0f);
+		float intervalSeconds = 180.0f;
+		if (App::Property::GetFloat(propListUpkeep.get(), 0x07A1BC05, intervalSeconds) && intervalSeconds >= 30.0f) {
+			upkeepIntervalMs = static_cast<int>(intervalSeconds * 1000.0f);
 		}
 	}
 	if (configUpkeepMultiplier < 0.0f || configUpkeepMultiplier > 5.0f) {
 		configUpkeepMultiplier = 1.0f;
 	}
 
-	// 4. Множитель недовольства заводов/забастовок ратуш из UnrestConfig.prop (0.0x - 2.0x)
+	// 4. Множитель чувствительности к забастовкам городов из UnrestConfig.prop (0.0x - 2.0x)
 	PropertyListPtr propListUnrest;
 	if (PropManager.GetPropertyList(id(u"UnrestConfig"), 0x02ae0c7e, propListUnrest) && propListUnrest != nullptr) {
-		App::Property::GetFloat(propListUnrest.get(), 0x07A1BC05, configCityUnrestMultiplier);
+		App::Property::GetFloat(propListUnrest.get(), 0x07A1BC04, configCityUnrestMultiplier);
 	}
 	if (configCityUnrestMultiplier < 0.0f || configCityUnrestMultiplier > 5.0f) {
 		configCityUnrestMultiplier = 1.0f;
@@ -139,10 +138,10 @@ int cPlayerDefensiveShipsManager::GetDynamicSoftCap(cEmpire* empire) {
 	if (!empire) return softCapThreshold;
 
 	int totalSystems = static_cast<int>(empire->mStars.size());
-	int weaponryRank = eastl::max<int>(empire->GetWeaponryLevel(), 1);
+	int weaponryRank = max(empire->GetWeaponryLevel(), 1);
 	int dynamicCap = 20 + static_cast<int>(totalSystems * 0.8f) + (weaponryRank * 3);
 
-	dynamicCap = static_cast<int>(std::round(static_cast<float>(dynamicCap) * configFleetMultiplier));
+	dynamicCap = static_cast<int>(round(static_cast<float>(dynamicCap) * configFleetMultiplier));
 	if (dynamicCap < 12) dynamicCap = 12;
 	if (dynamicCap > 120) dynamicCap = 120;
 
@@ -169,32 +168,32 @@ float cPlayerDefensiveShipsManager::GetSpiceBasePrice(cPlanetRecord* planet) {
 }
 
 int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
-	if (!empire) return 250000;
+	if (!empire) return 200000;
 
-	int numStars = eastl::max<int>(static_cast<int>(empire->mStars.size()), 1);
-	float industrialValue = 0.0f;
+	int starCount = static_cast<int>(empire->mStars.size());
+	float spiceOutputWeight = 0.0f;
 
 	for (const auto& star : empire->mStars) {
 		if (!star) continue;
-		for (const auto& planet : star->GetPlanetRecords()) {
-			if (!planet || planet->GetTechLevel() != TechLevel::Empire) continue;
+		for (const auto& pl : star->GetPlanetRecords()) {
+			if (!pl || pl->GetTechLevel() != TechLevel::Empire) continue;
 
-			float tWeight = 0.35f;
-			if (planet->mType == PlanetType::T1) tWeight = 1.0f;
-			else if (planet->mType == PlanetType::T2) tWeight = 2.0f;
-			else if (planet->mType == PlanetType::T3) tWeight = planet->mbHomeWorld ? 4.5f : 3.2f;
+			float pSpice = max(GetSpiceBasePrice(pl.get()), 300.0f);
+			float tFactor = 0.4f;
+			if (pl->mbHomeWorld) tFactor = 3.0f;
+			else if (pl->mType == PlanetType::T3) tFactor = 2.0f;
+			else if (pl->mType == PlanetType::T2) tFactor = 1.2f;
+			else if (pl->mType == PlanetType::T1) tFactor = 0.7f;
 
-			float spiceRatio = eastl::max<float>(GetSpiceBasePrice(planet.get()) / 300.0f, 1.0f);
-			industrialValue += tWeight * spiceRatio * 12000.0f;
+			spiceOutputWeight += (pSpice / 300.0f) * tFactor * 12000.0f;
 		}
 	}
 
 	int arch = empire->mArchetype;
-	float bankMult = (arch == 5 || arch == 15) ? 1.75f : 1.0f; // Торговцы: 1.75x банковский потолок
+	float bankMult = (arch == 5 || arch == 15) ? 1.75f : 1.0f;
 
-	float rawCap = (60000.0f + static_cast<float>(numStars) * 25000.0f + industrialValue) * bankMult;
-	if (rawCap > 25000000.0f) rawCap = 25000000.0f;
-	return eastl::max<int>(static_cast<int>(std::round(rawCap)), 100000);
+	int dynamicCap = static_cast<int>(round((80000.0f + starCount * 30000.0f + spiceOutputWeight) * bankMult));
+	return max(dynamicCap, 100000);
 }
 
 int cPlayerDefensiveShipsManager::CalculateShipBuildCost(cEmpire* empire) {
@@ -203,99 +202,66 @@ int cPlayerDefensiveShipsManager::CalculateShipBuildCost(cEmpire* empire) {
 	int maxTreasury = GetDynamicMaxTreasury(empire);
 	int baseCost = 1000;
 	if (empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
-		baseCost = 2000; // Прогрессивный налог при переполненной казне (>80% MaxCap)
+		baseCost = 2000;
 	}
 
 	int systems = static_cast<int>(empire->mStars.size());
 	float inflationMultiplier = 1.0f + (systems / 10) * 0.10f;
 
-	return static_cast<int>(std::round(static_cast<float>(baseCost) * inflationMultiplier));
+	return static_cast<int>(round(static_cast<float>(baseCost) * inflationMultiplier));
 }
 
 int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
-	if (!empire || configUpkeepMultiplier <= 0.01f) {
-		return 0;
-	}
+	if (!empire || configUpkeepMultiplier <= 0.01f) return 0;
 
 	int arch = empire->mArchetype;
-	// Фанатики и Гроксы служат за веру и коллективный разум (нулевое денежное жалование)
+	// Фанатики и Гроксы служат за веру / коллективный разум бесплатно
 	if (arch == 2 || arch == 12 || arch == 10) {
 		return 0;
 	}
 
-	float netUpkeep = 0.0f;
-	for (const auto& star : empire->mStars) {
-		if (!star) continue;
-		for (const auto& planet : star->GetPlanetRecords()) {
-			if (!planet || planet->GetTechLevel() != TechLevel::Empire) continue;
-			if (planet->mbHomeWorld) continue; // Столица полностью на самообеспечении метрополии
-
-			// Оценка численности гарнизона колонии
-			int colonyCount = 1;
-			auto itCol = planetColonyCounts.find(planet);
-			if (itCol != planetColonyCounts.end() && itCol->second > 0) {
-				colonyCount = itCol->second;
-			} else if (planet->mType == PlanetType::T2) {
-				colonyCount = 2;
-			} else if (planet->mType == PlanetType::T3) {
-				colonyCount = 3;
-			}
-
-			int baseShips = (planet->mType == PlanetType::T0) ? playerOutpostDefenders : playerColonyDefenders;
-			int estShips = static_cast<int>(std::round(static_cast<float>(baseShips + (colonyCount - 1) * 2) * configFleetMultiplier));
-
-			float planetUpkeep = static_cast<float>(estShips) * 45.0f;
-
-			// Самоокупаемость за счет ценности местной пряности (богатая пряность гасит содержание охраны)
-			float spicePrice = GetSpiceBasePrice(planet.get());
-			float localSpiceSubsidy = 0.0f;
-			if (spicePrice > 3500.0f) localSpiceSubsidy = planetUpkeep * 1.0f;       // Полная самоокупаемость экзотикой
-			else if (spicePrice >= 2000.0f) localSpiceSubsidy = planetUpkeep * 0.85f; // Розовая/Фиолетовая покрывает 85%
-			else if (spicePrice >= 600.0f) localSpiceSubsidy = planetUpkeep * 0.45f;  // Синяя/Зеленая покрывает 45%
-			else if (spicePrice > 0.0f) localSpiceSubsidy = planetUpkeep * 0.15f;     // Красная/Желтая почти убыточны
-
-			float deficit = eastl::max<float>(planetUpkeep - localSpiceSubsidy, 0.0f);
-			netUpkeep += deficit;
-		}
-	}
-
-	// Модификатор растянутости империи и философии
-	int numStars = static_cast<int>(empire->mStars.size());
-	float scaleFactor = 1.0f + eastl::min<float>(static_cast<float>(numStars) * 0.015f, 0.75f);
-
 	float archUpkeepMult = 1.0f;
 	if (arch == 5 || arch == 15) {
-		archUpkeepMult = 1.30f; // Торговцы платят повышенные контракты ЧВК
-	} else if (arch == 1 || arch == 11 || arch == 3 || arch == 13) {
-		archUpkeepMult = 0.80f; // Воины и Рыцари: регулярный призыв обходится дешевле
-	} else if (arch == 6 || arch == 16 || arch == 7 || arch == 17 || arch == 8 || arch == 18 || arch == 9 || arch == 19) {
-		archUpkeepMult = 0.70f; // Экологи, Барды, Шаманы, Дипломаты: скромное местное ополчение
+		archUpkeepMult = 1.30f; // Торговцы платят наемникам повышенный контракт
+	} else if (arch == 1 || arch == 11 || arch == 13) {
+		archUpkeepMult = 0.80f; // Воины и Рыцари: регулярная воинская повинность дешевле
+	} else if (arch == 6 || arch == 16 || arch == 8 || arch == 18 || arch == 7 || arch == 17 || arch == 9 || arch == 19) {
+		archUpkeepMult = 0.85f; // Мирные философии: скромные аппетиты патрулей
 	}
 
-	float finalUpkeep = netUpkeep * scaleFactor * archUpkeepMult * configUpkeepMultiplier;
-	return eastl::max<int>(static_cast<int>(std::round(finalUpkeep)), 0);
-}
+	float totalNetUpkeep = 0.0f;
+	for (const auto& star : empire->mStars) {
+		if (!star) continue;
+		for (const auto& pl : star->GetPlanetRecords()) {
+			if (!pl || pl->GetTechLevel() != TechLevel::Empire) continue;
+			if (pl->mbHomeWorld) continue; // Столица полностью самоокупается налогами метрополии
 
-int cPlayerDefensiveShipsManager::GetTurretCount(cPlanetRecord* planet) {
-	if (!planet) return 0;
+			int garrisonSize = GetMaxDefenders(pl.get());
+			float rawPlanetUpkeep = static_cast<float>(garrisonSize) * 45.0f;
 
-	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
-		int turrets = 0;
-		const auto& cities = GetData<cCity>();
-		for (const auto& city : cities) {
-			if (city) {
-				turrets += static_cast<int>(city->mTurrets.size());
+			// Самоокупаемость за счет ценности местной пряности
+			float spicePrice = GetSpiceBasePrice(pl.get());
+			float spiceOffsetRatio = 0.25f; // Дешевая красная/желтая покрывает лишь 25% расходов охраны
+			if (spicePrice > 3500.0f) {
+				spiceOffsetRatio = 1.00f; // Экзотическая пряность полностью окупает гарнизон
+			} else if (spicePrice >= 2000.0f) {
+				spiceOffsetRatio = 0.85f; // Розовая/фиолетовая гасит 85% расходов
+			} else if (spicePrice >= 600.0f) {
+				spiceOffsetRatio = 0.55f; // Синяя/зеленая гасит 55% расходов
+			}
+
+			float netPlanetUpkeep = rawPlanetUpkeep * (1.0f - spiceOffsetRatio);
+			if (netPlanetUpkeep > 0.0f) {
+				totalNetUpkeep += netPlanetUpkeep;
 			}
 		}
-		planetTurretCounts[cPlanetRecordPtr(planet)] = turrets;
-		return turrets;
 	}
 
-	auto it = planetTurretCounts.find(planet);
-	if (it != planetTurretCounts.end()) {
-		return it->second;
-	}
-	return 0;
+	int systems = static_cast<int>(empire->mStars.size());
+	float scaleFactor = 1.0f + (systems / 15) * 0.10f;
+
+	int finalUpkeep = static_cast<int>(round(totalNetUpkeep * archUpkeepMult * scaleFactor * configUpkeepMultiplier));
+	return max(finalUpkeep, 0);
 }
 
 float cPlayerDefensiveShipsManager::GetPlanetaryCityUnrestFactor(cPlanetRecord* planet) {
@@ -304,44 +270,44 @@ float cPlayerDefensiveShipsManager::GetPlanetaryCityUnrestFactor(cPlanetRecord* 
 	}
 
 	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
+		int totalCities = 0;
+		int totalUnhappy = 0;
 		int totalFactories = 0;
 		int totalEntertainment = 0;
-		int unhappyCitizens = 0;
-		int cityCount = 0;
 
 		const auto& cities = GetData<cCity>();
 		for (const auto& city : cities) {
 			if (!city) continue;
-			cityCount++;
-			unhappyCitizens += eastl::max<int>(city->mUnhappyCount, 0);
+			totalCities++;
+			totalUnhappy += max(city->mUnhappyCount, 0);
 
 			for (const auto& bld : city->mBuildings) {
 				if (!bld) continue;
-				int bType = bld->mBuildingType;
-				if (bType == kBuildingFactory) {
+				uint32_t nounID = bld->GetNounID();
+				if (nounID == Simulator::GameNounIDs::kBuildingIndustry) {
 					totalFactories++;
-				} else if (bType == kBuildingEntertainment) {
+				} else if (nounID == Simulator::GameNounIDs::kBuildingEntertainment) {
 					totalEntertainment++;
 				}
 			}
 		}
 
-		if (cityCount > 0) {
-			float unrest = 0.0f;
-			// Реально бастующие недовольные горожане в ратушах
-			if (unhappyCitizens > 0) {
-				unrest += eastl::min<float>(static_cast<float>(unhappyCitizens) * 0.22f, 0.75f);
-			}
-			// Индустриальная эксплуатация: заводы без развлекательных центров
-			if (totalFactories > totalEntertainment + cityCount) {
-				int excessFactories = totalFactories - (totalEntertainment + cityCount);
-				unrest += eastl::min<float>(static_cast<float>(excessFactories) * 0.07f, 0.45f);
-			}
+		float unrest = 0.0f;
+		if (totalCities > 0) {
+			// Прямая забастовка недовольных жителей в ратушах
+			float avgUnhappy = static_cast<float>(totalUnhappy) / static_cast<float>(totalCities);
+			unrest += avgUnhappy * 0.28f;
 
-			unrest = eastl::min<float>(unrest * configCityUnrestMultiplier, 1.0f);
-			planetUnrestCache[cPlanetRecordPtr(planet)] = unrest;
-			return unrest;
+			// Промышленная эксплуатация: заводы без развлекательных центров копят напряжение
+			int excessFactories = totalFactories - (totalEntertainment * 2) - totalCities;
+			if (excessFactories > 0) {
+				unrest += min(static_cast<float>(excessFactories) * 0.08f, 0.50f);
+			}
 		}
+
+		unrest = min(unrest * configCityUnrestMultiplier, 1.50f);
+		planetUnrestCache[cPlanetRecordPtr(planet)] = unrest;
+		return unrest;
 	}
 
 	auto it = planetUnrestCache.find(planet);
@@ -374,7 +340,7 @@ bool cPlayerDefensiveShipsManager::IsPlanetUnderAttack(cPlanetRecord* planet) {
 					return true;
 				}
 				if (!otherEmpire) {
-					return true; // Пираты или мятежники (0xFFFFFFFF) — поднимают лояльный резерв из ангаров!
+					return true; // Пираты или мятежники (0xFFFFFFFF)
 				}
 			}
 		}
@@ -382,162 +348,153 @@ bool cPlayerDefensiveShipsManager::IsPlanetUnderAttack(cPlanetRecord* planet) {
 	return false;
 }
 
-bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet, cEmpire* empire, bool isPeacetimeCheck) {
+bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet, cEmpire* empire, bool peacetimeCheck) {
 	if (!planet || !empire || configRebellionMultiplier <= 0.01f) {
 		return false;
 	}
 
-	// 1. Фанатики и Гроксы: 100% иммунитет веры и коллективного разума везде и всегда
+	// 1. Фанатики и Гроксы: 0% риск бунта везде
 	int arch = empire->mArchetype;
 	if (arch == 2 || arch == 12 || arch == 10) {
 		return false;
 	}
 
-	// 2. Проверка триггеров кризиса (казна, долг по жалованию, забастовка городов, потери в бою)
+	// 2. Триггеры кризиса: пустая казна, задолженность по жалованию, забастовка городов или потери в бою
 	int maxTreasury = GetDynamicMaxTreasury(empire);
-	int crisisThreshold = static_cast<int>(maxTreasury * 0.15f);
+	int crisisThreshold = max(static_cast<int>(maxTreasury * 0.15f), 15000);
 	bool isBankrupt = (empire->mEmpireMoney < crisisThreshold) || (unpaidUpkeepCycles > 0);
 
 	float cityUnrest = GetPlanetaryCityUnrestFactor(planet);
-	bool hasSevereCityStrike = (cityUnrest >= 0.20f);
+	bool hasCityRiots = (cityUnrest >= 0.25f);
 
 	int currentDef = GetDefendersOnPlanet(planet);
 	int maxDef = GetMaxDefenders(planet);
-	bool heavyLosses = false;
-	if (!isPeacetimeCheck) {
-		if (maxDef <= 3) {
-			heavyLosses = (currentDef < maxDef); // Разблокировка для малых аванпостов T0/T1
-		} else {
-			heavyLosses = (currentDef < (maxDef / 2));
-		}
-	}
+	bool heavyLosses = !peacetimeCheck && ((maxDef <= 2) ? (currentDef < maxDef) : (currentDef < (maxDef / 2)));
 
-	// В мирное время восстание возможно ТОЛЬКО если есть реальное недовольство ратуш или жесткий дефолт казны
-	if (isPeacetimeCheck) {
-		if (!hasSevereCityStrike && !isBankrupt) {
+	if (peacetimeCheck) {
+		// В мирное время восстание начинается только от долгов по содержанию/глубокого дефолта ИЛИ реальной забастовки городов
+		bool severeDebt = (unpaidUpkeepCycles > 0) || (configUpkeepMultiplier > 0.01f && empire->mEmpireMoney < (crisisThreshold / 2));
+		if (!severeDebt && !hasCityRiots) {
 			return false;
 		}
-		// Столица не начинает мирный путч без тяжелейшей забастовки жителей
-		if (planet->mbHomeWorld && cityUnrest < 0.55f) {
+		// Столица не поднимает мирный мятеж без тяжелой стачки жителей
+		if (planet->mbHomeWorld && cityUnrest < 0.60f) {
 			return false;
 		}
 	} else {
-		if (!isBankrupt && !heavyLosses && !hasSevereCityStrike) {
+		if (!isBankrupt && !heavyLosses && !hasCityRiots) {
 			return false;
 		}
 	}
 
-	// 3. Базовый шанс мятежа по философии
-	float chance = 0.25f;
-	if (arch == 1 || arch == 11) {
-		chance = 0.50f; // Воины: военная хунта
+	// 3. Базовый шанс по философии
+	float rebellionChance = 0.25f;
+	if (arch == 1 || arch == 11 || arch == 13) {
+		rebellionChance = 0.50f; // Воины / Рыцари
 	} else if (arch == 5 || arch == 15) {
-		chance = 0.42f; // Торговцы: бунт неоплаченных ЧВК
-	} else if (arch == 3 || arch == 13) {
-		chance = 0.30f; // Рыцари: мятеж орденов окраин
+		rebellionChance = 0.40f; // Торговцы
 	} else if (arch == 4 || arch == 6 || arch == 14 || arch == 16) {
-		chance = 0.15f; // Ученые и Экологи: высокая дисциплина
+		rebellionChance = 0.15f; // Ученые и Экологи
 	}
 
-	// В мирное время базовый шанс спокойнее, но разгоняется от забастовок заводов и долгов по жалованию
-	if (isPeacetimeCheck) {
-		chance *= 0.45f;
+	if (peacetimeCheck) {
+		rebellionChance *= 0.65f; // Базовый мирный порог мягче боевого штурма, но разгоняется стачками и долгами
 	}
+
+	// Бонус от забастовок заводов и долгов по содержанию гарнизона
 	if (cityUnrest > 0.0f) {
-		chance += cityUnrest * 0.35f;
+		rebellionChance += cityUnrest * 0.35f;
 	}
 	if (unpaidUpkeepCycles > 0) {
-		chance += eastl::min<float>(static_cast<float>(unpaidUpkeepCycles) * 0.12f, 0.36f);
+		rebellionChance += min(static_cast<float>(unpaidUpkeepCycles) * 0.12f, 0.45f);
 	}
 
-	// 4. Терраиндекс и статус Столицы
+	// 4. Модификатор Т-индекса и столицы
+	float planetTierFactor = 1.0f;
 	if (planet->mbHomeWorld) {
-		chance *= 0.20f; // Элитная гвардия столицы (-80%)
+		planetTierFactor = 0.20f;
 	} else if (planet->mType == PlanetType::T0) {
-		chance *= 1.55f; // Каторжные шахты T0 (+55%)
+		planetTierFactor = 1.55f;
 	} else if (planet->mType == PlanetType::T1) {
-		chance *= 1.25f; // Суровые пограничные колонии T1 (+25%)
+		planetTierFactor = 1.25f;
+	} else if (planet->mType == PlanetType::T2) {
+		planetTierFactor = 0.95f;
 	} else if (planet->mType == PlanetType::T3) {
-		chance *= 0.60f; // Райские миры T3 (-40%)
+		planetTierFactor = 0.60f;
 	}
 
-	// 5. Богатство местной пряности
+	// 5. Модификатор ценности местной пряности
 	float spicePrice = GetSpiceBasePrice(planet);
+	float spiceStabilityFactor = 1.0f;
 	if (spicePrice > 3500.0f) {
-		chance *= 0.65f; // Экзотическая пряность (-35%)
+		spiceStabilityFactor = 0.65f;
 	} else if (spicePrice >= 2000.0f) {
-		chance *= 0.75f; // Фиолетовая / Розовая (-25%)
+		spiceStabilityFactor = 0.75f;
 	} else if (spicePrice >= 600.0f) {
-		chance *= 0.90f; // Синяя / Зеленая (-10%)
+		spiceStabilityFactor = 0.90f;
 	} else {
-		chance *= 1.15f; // Дешевая Красная / Желтая или пустая (+15%)
+		spiceStabilityFactor = 1.15f;
 	}
 
-	// 6. Полицейский контроль ратушей Unlimited-Colony и сети ПВО
-	int cities = GetColonyCount(planet);
-	int turrets = GetTurretCount(planet);
-	if (cities <= 1) {
-		chance *= 1.15f; // Одинокий форпост легко захватывается путчистами
-	} else {
-		float cityControl = 1.0f / (1.0f + static_cast<float>(cities - 1) * 0.12f);
-		chance *= eastl::max<float>(cityControl, 0.55f);
+	// 6. Полицейский контроль ратушей и турелей (Unlimited-Colony)
+	int cityCount = GetColonyCount(planet);
+	int turretCount = GetTurretCount(planet);
+	float garrisonControlFactor = 1.0f;
+	if (cityCount <= 1) {
+		garrisonControlFactor = 1.15f;
+	} else if (cityCount > 2) {
+		garrisonControlFactor = max(1.0f - static_cast<float>(cityCount - 2) * 0.08f, 0.50f);
 	}
-	if (turrets >= 12) {
-		chance *= 0.80f;
+	if (turretCount >= 12) {
+		garrisonControlFactor *= 0.85f;
 	}
 
-	// 7. Дистанция от столицы по философии (сепаратизм окраин vs гармоничное самоуправление)
+	// 7. Дистанция от столицы по философии
+	float distanceFactor = 1.0f;
 	cStarRecord* homeStar = empire->GetHomeStarRecord();
-	cStarRecord* planetStar = planet->GetStarRecord();
-	if (homeStar && planetStar && homeStar != planetStar) {
-		Math::Vector3 diff = homeStar->mPosition - planetStar->mPosition;
+	cStarRecord* targetStar = planet->GetStarRecord();
+	if (!planet->mbHomeWorld && homeStar != nullptr && targetStar != nullptr && homeStar != targetStar) {
+		Math::Vector3 diff = homeStar->mPosition - targetStar->mPosition;
 		float dist = std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
 
-		if (arch == 1 || arch == 11 || arch == 3 || arch == 13 || arch == 5 || arch == 15) {
-			// Авторитарные Воины/Рыцари и жадные Торговцы теряют контроль за 12 парсеками (до +60%)
+		if (arch == 1 || arch == 11 || arch == 13 || arch == 5 || arch == 15) {
 			if (dist > 12.0f) {
-				float rimPenalty = 1.0f + eastl::min<float>((dist - 12.0f) * 0.02f, 0.60f);
-				chance *= rimPenalty;
+				distanceFactor = min(1.0f + (dist - 12.0f) * 0.025f, 1.60f); // Воины и Торговцы: сепаратизм окраин
+			}
+		} else if (arch == 6 || arch == 16 || arch == 7 || arch == 17 || arch == 8 || arch == 18 || arch == 9 || arch == 19) {
+			if (dist > 12.0f) {
+				distanceFactor = max(1.0f - (dist - 12.0f) * 0.015f, 0.65f); // Дружелюбные: гармония и самоуправление вдали от центра
 			}
 		} else if (arch == 4 || arch == 14) {
-			// Ученые: стабильная гиперсвязь до 25 пк, дальше техно-сепаратизм (до +20%)
 			if (dist > 25.0f) {
-				float sciPenalty = 1.0f + eastl::min<float>((dist - 25.0f) * 0.01f, 0.20f);
-				chance *= sciPenalty;
-			}
-		} else {
-			// Гармоничные философии (Дипломаты, Экологи, Барды, Шаманы): самоуправление снижает бунт до -35%
-			if (dist > 12.0f) {
-				float harmonyBonus = 1.0f - eastl::min<float>((dist - 12.0f) * 0.012f, 0.35f);
-				chance *= harmonyBonus;
+				distanceFactor = min(1.0f + (dist - 25.0f) * 0.01f, 1.20f); // Ученые: гиперсвязь до 25 пк, дальше техно-прагматизм
 			}
 		}
 	}
 
-	chance *= configRebellionMultiplier;
-	if (chance > 0.90f) chance = 0.90f;
+	float finalChance = rebellionChance * planetTierFactor * spiceStabilityFactor * garrisonControlFactor * distanceFactor * configRebellionMultiplier;
+	finalChance = min(max(finalChance, 0.0f), 0.90f);
 
-	return (Math::randf() < chance);
+	return (Math::randf() < finalChance);
 }
 
-bool cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* planet, cEmpire* empire) {
-	if (!planet || !empire || configRebellionMultiplier <= 0.01f) {
-		return false;
-	}
+void cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* planet, cEmpire* empire) {
+	if (!planet || !empire || configRebellionMultiplier <= 0.01f) return;
+	if (GetCurrentContext() != SpaceContext::Planet || planet != GetActivePlanetRecord()) return;
 
-	// Проверка индивидуального кулдауна планеты (минимум 3 минуты между вспышками бунта на одной колонии)
+	// Проверка кулдауна (не чаще раза в 4 минуты на одной и той же колонии)
 	auto itCd = planetRebelCooldowns.find(planet);
 	if (itCd != planetRebelCooldowns.end() && elapsedTime < itCd->second) {
-		return false;
+		return;
 	}
 
 	if (!ShouldTriggerRebellion(planet, empire, true)) {
-		// Ставим мягкую отсрочку проверки на 45 секунд, чтобы не кидать кубик каждый кадр
+		// Ставим небольшой откат проверки на 45 секунд, чтобы не кидать кубик каждый кадр
 		planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 45000;
-		return false;
+		return;
 	}
 
-	// Ищем лояльных защитников патруля на орбите для перехвата мятежниками
+	// Собираем живых лояльных защитников патруля на орбите
 	eastl::vector<cGameDataUFO*> loyalPatrol;
 	const auto& ufos = GetData<cGameDataUFO>();
 	for (const auto& ufo : ufos) {
@@ -548,64 +505,60 @@ bool cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* pla
 		}
 	}
 
-	if (loyalPatrol.empty()) {
-		return false;
-	}
+	if (loyalPatrol.empty()) return;
 
-	// От 1 до половины текущего патруля (плюс 1 корабль из недовольного ангара при жесткой забастовке) поднимают мятеж!
-	int rebelCount = eastl::max<int>(static_cast<int>(loyalPatrol.size()) / 2, 1);
-	for (int i = 0; i < rebelCount && i < static_cast<int>(loyalPatrol.size()); ++i) {
-		cGameDataUFO* rebelUfo = loyalPatrol[i];
-		rebelUfo->mPoliticalID = 0xFFFFFFFF; // Сепаратисты
-		rebelUfo->mUFOType = static_cast<int>(UfoType::Bomber); // Включаем ИИ бомбардировки ратуш!
+	// От 30% до 50% текущего патруля поднимает сепаратистский мятеж и атакует ратуши
+	int rebelCount = max(static_cast<int>(round(static_cast<float>(loyalPatrol.size()) * 0.40f)), 1);
+	rebelCount = eastl::min<int>(rebelCount, static_cast<int>(loyalPatrol.size()));
+
+	for (int i = 0; i < rebelCount; ++i) {
+		cGameDataUFO* traitor = loyalPatrol[i];
+		traitor->mPoliticalID = 0xFFFFFFFF;
+		traitor->mUFOType = static_cast<int>(UfoType::Bomber);
 		DecreaseDefendersOnPlanet(planet);
 	}
 
-	// Если на планете тяжелая забастовка ратуш и есть корабли в ангаре — еще один экипаж угоняет бомбардировщик с земли
-	if (reserveToMobilize > 0 && GetPlanetaryCityUnrestFactor(planet) >= 0.35f) {
-		cGameDataUFO* hijackedUfo = SpawnDefensiveShip(planet, empire, false);
-		if (hijackedUfo) {
-			hijackedUfo->mPoliticalID = 0xFFFFFFFF;
-			hijackedUfo->mUFOType = static_cast<int>(UfoType::Bomber);
-			reserveToMobilize--;
+	// Если из-за сильной стачки или долгов бунт масштабный — часть ангарного резерва тоже вылетает путчистами
+	if (reserveToMobilize > 0 && GetPlanetaryCityUnrestFactor(planet) >= 0.50f) {
+		cGameDataUFO* extraRebel = SpawnDefensiveShip(planet, empire, false);
+		if (extraRebel) {
+			extraRebel->mPoliticalID = 0xFFFFFFFF;
+			extraRebel->mUFOType = static_cast<int>(UfoType::Bomber);
+			reserveToMobilize = max(reserveToMobilize - 1, 0);
 			DecreaseDefendersOnPlanet(planet);
 		}
 	}
 
-	// Кулдаун 3.5 минуты до следующего возможного мирного восстания на этой планете
-	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 210000;
-	return true;
+	// Кулдаун 4 минуты после начала гражданской войны на этой колонии
+	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 240000;
 }
 
 void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 	if (!IsSpaceGame()) return;
 
 	elapsedTime += deltaGameTime;
+	if (elapsedTime < lastUpkeepTime) lastUpkeepTime = 0;
 
 	cEmpire* playerEmpire = GetPlayerEmpire();
 
-	// 1. Периодическое списание содержания гарнизонов (Upkeep)
-	if (playerEmpire && configUpkeepMultiplier > 0.01f && upkeepIntervalMs > 0) {
-		if (elapsedTime < lastUpkeepTime) lastUpkeepTime = 0;
-		if (elapsedTime - lastUpkeepTime >= upkeepIntervalMs) {
-			lastUpkeepTime = elapsedTime;
-			int upkeepCost = CalculateEmpireFleetUpkeep(playerEmpire);
-			if (upkeepCost > 0) {
-				if (playerEmpire->mEmpireMoney >= upkeepCost) {
-					playerEmpire->mEmpireMoney -= upkeepCost;
-					if (unpaidUpkeepCycles > 0) unpaidUpkeepCycles--;
-				} else {
-					// Денег не хватило — обнуляем остаток казны и копим долг перед гарнизонами!
-					playerEmpire->mEmpireMoney = 0;
-					unpaidUpkeepCycles = eastl::min<int>(unpaidUpkeepCycles + 1, 5);
-				}
-			} else if (unpaidUpkeepCycles > 0) {
-				unpaidUpkeepCycles--;
+	// Периодическое списание жалования гарнизонам (работает и на галактической карте, и на планетах)
+	if (playerEmpire && configUpkeepMultiplier > 0.01f && (elapsedTime - lastUpkeepTime >= upkeepIntervalMs)) {
+		lastUpkeepTime = elapsedTime;
+		int upkeepBill = CalculateEmpireFleetUpkeep(playerEmpire);
+
+		if (upkeepBill > 0) {
+			if (playerEmpire->mEmpireMoney >= upkeepBill) {
+				playerEmpire->mEmpireMoney -= upkeepBill;
+				if (unpaidUpkeepCycles > 0) unpaidUpkeepCycles--;
+			} else {
+				playerEmpire->mEmpireMoney = 0;
+				unpaidUpkeepCycles = eastl::min<int>(unpaidUpkeepCycles + 1, 6);
 			}
+		} else if (unpaidUpkeepCycles > 0 && playerEmpire->mEmpireMoney > 25000) {
+			unpaidUpkeepCycles--;
 		}
 	}
 
-	// 2. Логика на активной орбите планеты игрока
 	if (GetCurrentContext() == SpaceContext::Planet) {
 		cPlanetRecord* activePlanet = GetActivePlanetRecord();
 
@@ -618,9 +571,8 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 
 		uint32_t playerEmpID = GetPlayerEmpireID();
 		if (activePlanet && activePlanet->GetStarRecord() &&
-		    playerEmpID != 0 && activePlanet->GetStarRecord()->mEmpireID == playerEmpID && playerEmpire) {
+		    playerEmpID != 0 && activePlanet->GetStarRecord()->mEmpireID == playerEmpID) {
 
-			// Обновляем кэш турелей и недовольства заводов
 			GetTurretCount(activePlanet);
 			GetPlanetaryCityUnrestFactor(activePlanet);
 
@@ -643,7 +595,7 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 
 						int shipCost = CalculateShipBuildCost(playerEmpire);
 						for (int i = 0; i < diff; i++) {
-							if (playerEmpire->mEmpireMoney >= shipCost) {
+							if (playerEmpire && playerEmpire->mEmpireMoney >= shipCost) {
 								playerEmpire->mEmpireMoney -= shipCost;
 							}
 							SpawnDefensiveShip(activePlanet, playerEmpire, false);
@@ -658,14 +610,13 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 
 			bool underAttack = IsPlanetUnderAttack(activePlanet);
 
-			// Если на орбите тихо — проверяем внутреннее колониальное восстание (забастовка ратуш / долги казны)
+			// Если внешнего нападения нет, проверяем риск внутреннего колониального восстания (от стачек или долгов)
 			if (!underAttack) {
-				if (TryTriggerColonialUprising(activePlanet, playerEmpire)) {
-					underAttack = true; // Началась гражданская война на орбите!
-				}
+				TryTriggerColonialUprising(activePlanet, playerEmpire);
+				underAttack = IsPlanetUnderAttack(activePlanet);
 			}
 
-			// Подъем верного резерва из ангаров для подавления внешней атаки ИЛИ вспыхнувшего мятежа!
+			// Подъем верного резерва из ангаров для подавления врагов или собственных путчистов
 			if (reserveToMobilize > 0 && (elapsedTime - lastMobilizeTime >= 3000) && underAttack) {
 				int toDeploy = eastl::min<int>(3, reserveToMobilize);
 				for (int i = 0; i < toDeploy; i++) {
@@ -680,7 +631,6 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 		reserveToMobilize = 0;
 	}
 
-	// 3. Независимая обработка всех таймеров верфей
 	for (size_t i = 0; i < planetsToReinforce.size(); ) {
 		if (elapsedTime >= planetsToReinforce[i].timeToReinforce) {
 			cPlanetRecordPtr planet = planetsToReinforce[i].planet;
@@ -699,9 +649,9 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 void cPlayerDefensiveShipsManager::OnModeEntered(uint32_t previousModeID, uint32_t newModeID) {
 	if (newModeID == GameModeIDs::kGameSpace) {
 		elapsedTime = 0;
-		lastUpkeepTime = 0;
-		lastMobilizeTime = 0;
 		reserveToMobilize = 0;
+		lastMobilizeTime = 0;
+		lastUpkeepTime = 0;
 		unpaidUpkeepCycles = 0;
 		lastActivePlanet = nullptr;
 		planetsToReinforce.clear();
@@ -745,19 +695,19 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	if (!empire) empire = GetPlayerEmpire();
 	if (!empire) return 600.0f;
 
-	int weaponryRank = eastl::max<int>(empire->GetWeaponryLevel(), 1);
+	int weaponryRank = max(empire->GetWeaponryLevel(), 1);
 	int totalStars = static_cast<int>(empire->mStars.size());
-	float imperialIndustrialBonus = eastl::min<float>(static_cast<float>(totalStars) * 8.0f, 400.0f);
+	float imperialIndustrialBonus = min(static_cast<float>(totalStars) * 8.0f, 400.0f);
 	float dynamicBaseHealth = 450.0f + (static_cast<float>(weaponryRank) * 120.0f) + imperialIndustrialBonus;
 
 	float archetypeMultiplier = 1.0f;
 	int arch = empire->mArchetype;
 	if (arch == 1 || arch == 2 || arch == 3 || arch == 10 || arch == 11 || arch == 12 || arch == 13) {
-		archetypeMultiplier = 1.35f; // Воин, Фанатик, Рыцарь, Грокс
+		archetypeMultiplier = 1.35f;
 	} else if (arch == 4 || arch == 5 || arch == 6 || arch == 14 || arch == 15 || arch == 16) {
-		archetypeMultiplier = 1.10f; // Ученый, Торговец, Эколог
+		archetypeMultiplier = 1.10f;
 	} else {
-		archetypeMultiplier = 0.85f; // Бард, Шаман, Дипломат, Странник
+		archetypeMultiplier = 0.85f;
 	}
 
 	float baseHealth = dynamicBaseHealth * archetypeMultiplier;
@@ -777,10 +727,10 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	float totalHP = baseHealth + spiceBonus + turretBonus;
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
-	if (empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
-		totalHP *= 1.20f; // Сверхфинансирование (>80% MaxCap)
-	} else if (empire->mEmpireMoney < static_cast<int>(maxTreasury * 0.15f) || unpaidUpkeepCycles > 0) {
-		totalHP *= 0.75f; // Финансовый кризис или долги по содержанию
+	if (totalStars >= 3 && empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
+		totalHP *= 1.20f;
+	} else if (empire->mEmpireMoney < max(static_cast<int>(maxTreasury * 0.15f), 15000) || unpaidUpkeepCycles > 0) {
+		totalHP *= 0.75f;
 	}
 
 	return totalHP;
@@ -813,19 +763,44 @@ cGameDataUFO* cPlayerDefensiveShipsManager::SpawnDefensiveShip(cPlanetRecord* pl
 	return ufo;
 }
 
+int cPlayerDefensiveShipsManager::GetTurretCount(cPlanetRecord* planet) {
+	if (!planet) return 0;
+
+	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
+		int turrets = 0;
+		const auto& cities = GetData<cCity>();
+		for (const auto& city : cities) {
+			if (city) {
+				turrets += static_cast<int>(city->mTurrets.size());
+			}
+		}
+		planetTurretCounts[cPlanetRecordPtr(planet)] = turrets;
+		return turrets;
+	}
+
+	auto it = planetTurretCounts.find(planet);
+	if (it != planetTurretCounts.end()) {
+		return it->second;
+	}
+	return 0;
+}
+
 int cPlayerDefensiveShipsManager::GetColonyCount(cPlanetRecord* planet) {
 	if (!planet) return 1;
 
 	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
 		int count = 0;
+		int turrets = 0;
 		const auto& cities = GetData<cCity>();
 		for (const auto& city : cities) {
 			if (city) {
 				count++;
+				turrets += static_cast<int>(city->mTurrets.size());
 			}
 		}
 		if (count > 0) {
 			planetColonyCounts[cPlanetRecordPtr(planet)] = count;
+			planetTurretCounts[cPlanetRecordPtr(planet)] = turrets;
 			return count;
 		}
 	}
@@ -847,9 +822,9 @@ int cPlayerDefensiveShipsManager::GetColonyCount(cPlanetRecord* planet) {
 int cPlayerDefensiveShipsManager::GetPeacePatrolCount(cPlanetRecord* planet) {
 	if (!planet) return 2;
 	int colonyCount = GetColonyCount(planet);
-	int peacePatrol = eastl::max<int>(colonyCount, 2);
+	int peacePatrol = max(colonyCount, 2);
 	if (planet->mbHomeWorld) {
-		peacePatrol = eastl::max<int>(colonyCount, 5);
+		peacePatrol = max(colonyCount, 5);
 	}
 	return peacePatrol;
 }
@@ -875,7 +850,7 @@ int cPlayerDefensiveShipsManager::GetMaxDefenders(cPlanetRecord* planet) {
 	else if (planet->mType == PlanetType::T0) baseDefenders = playerOutpostDefenders;
 
 	int rawTotal = baseDefenders + (colonyCount - 1) * stepBonus;
-	rawTotal = static_cast<int>(std::round(static_cast<float>(rawTotal) * configFleetMultiplier));
+	rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * configFleetMultiplier));
 
 	cEmpire* empire = nullptr;
 	if (planet->GetStarRecord() && planet->GetStarRecord()->mEmpireID != 0) {
@@ -887,11 +862,11 @@ int cPlayerDefensiveShipsManager::GetMaxDefenders(cPlanetRecord* planet) {
 
 	if (rawTotal > dynamicCap) {
 		float excess = static_cast<float>(rawTotal - dynamicCap);
-		int diminishedBonus = static_cast<int>(std::round(std::sqrt(excess) * 4.0f));
+		int diminishedBonus = static_cast<int>(round(std::sqrt(excess) * 4.0f));
 		return dynamicCap + diminishedBonus;
 	}
 
-	return eastl::max<int>(rawTotal, 1);
+	return max(rawTotal, 1);
 }
 
 int cPlayerDefensiveShipsManager::GetSpawnBatch(cPlanetRecord* planet) {
@@ -949,17 +924,17 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 	float treasurySpeedFactor = 1.0f;
 	if (empire) {
 		int maxTreasury = GetDynamicMaxTreasury(empire);
-		if (empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
+		if (empire->mStars.size() >= 3 && empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
 			treasurySpeedFactor = 0.75f;
-		} else if (empire->mEmpireMoney < static_cast<int>(maxTreasury * 0.15f) || unpaidUpkeepCycles > 0) {
+		} else if (empire->mEmpireMoney < max(static_cast<int>(maxTreasury * 0.15f), 15000) || unpaidUpkeepCycles > 0) {
 			treasurySpeedFactor = 2.20f;
 		}
 	}
 
-	// Забастовка заводов в ратушах тоже тормозит выпуск новых кораблей
-	float strikeDelay = 1.0f + GetPlanetaryCityUnrestFactor(planet) * 0.60f;
+	// Забастовки рабочих на заводах колонии тормозят выпуск кораблей с верфей
+	float unrestSlowdown = 1.0f + GetPlanetaryCityUnrestFactor(planet) * 0.60f;
 
-	int dynamicTime = static_cast<int>(std::round(static_cast<float>(reinforceTime) * speedMultiplier * spiceSpeedFactor * treasurySpeedFactor * strikeDelay));
+	int dynamicTime = static_cast<int>(round(static_cast<float>(reinforceTime) * speedMultiplier * spiceSpeedFactor * treasurySpeedFactor * unrestSlowdown));
 
 	auto it = planetDefenderShips.find(planet);
 	if (it != planetDefenderShips.end()) {
@@ -968,12 +943,12 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 			float missingRatio = 1.0f - (static_cast<float>(it->second) / static_cast<float>(maxDef));
 			if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
 				float siegePenalty = 1.0f + (missingRatio * 1.5f);
-				dynamicTime = static_cast<int>(std::round(static_cast<float>(dynamicTime) * siegePenalty));
+				dynamicTime = static_cast<int>(round(static_cast<float>(dynamicTime) * siegePenalty));
 			}
 		}
 	}
 
-	return eastl::max<int>(dynamicTime, 2000);
+	return max(dynamicTime, 2000);
 }
 
 int cPlayerDefensiveShipsManager::GetDefendersOnPlanet(cPlanetRecord* planet) {
@@ -993,7 +968,7 @@ void cPlayerDefensiveShipsManager::DecreaseDefendersOnPlanet(cPlanetRecord* plan
 			it->second--;
 		}
 	} else {
-		planetDefenderShips[cPlanetRecordPtr(planet)] = eastl::max<int>(GetMaxDefenders(planet) - 1, 0);
+		planetDefenderShips[cPlanetRecordPtr(planet)] = max(GetMaxDefenders(planet) - 1, 0);
 	}
 
 	if (!IsPlanetQueuedForReinforcement(planet)) {
@@ -1055,7 +1030,6 @@ void cPlayerDefensiveShipsManager::ManagePlanetDefenders(cPlanetRecord* planet) 
 	if (!planet) return;
 
 	GetColonyCount(planet);
-	GetTurretCount(planet);
 	GetPlanetaryCityUnrestFactor(planet);
 	lastActivePlanet = planet;
 	lastMobilizeTime = elapsedTime;
@@ -1073,14 +1047,14 @@ void cPlayerDefensiveShipsManager::ManagePlanetDefenders(cPlanetRecord* planet) 
 	int currentTotal = (it != planetDefenderShips.end()) ? it->second : totalMax;
 
 	int activeSpawnCount = eastl::min<int>(peaceCount, currentTotal);
-	reserveToMobilize = eastl::max<int>(currentTotal - activeSpawnCount, 0);
+	reserveToMobilize = max(currentTotal - activeSpawnCount, 0);
 
 	for (int i = 0; i < activeSpawnCount; i++) {
 		SpawnDefensiveShip(planet, targetEmpire, false);
 	}
 
-	// Если колония бастует (перекос заводов/несчастье) или империя в долгах — патруль может сразу начать бунт при прилете!
-	if (targetEmpire && targetEmpire == GetPlayerEmpire() && !IsPlanetUnderAttack(planet)) {
+	// Если при входе на планету в городах бушует стачка или не платится жалование — проверяем риск сепаратистского мятежа
+	if (targetEmpire && targetEmpire->GetEmpireID() == GetPlayerEmpireID()) {
 		TryTriggerColonialUprising(planet, targetEmpire);
 	}
 }
