@@ -4,6 +4,7 @@
 #include <Spore\BasicIncludes.h>
 #include <Spore\Simulator\cCity.h>
 #include <Spore\Simulator\cBuilding.h>
+#include <Spore\Simulator\cSpaceToolData.h>
 #include <EASTL\vector.h>
 #include <EASTL\map.h>
 
@@ -12,6 +13,13 @@ namespace Simulator {
 	class XmlSerializer;
 }
 
+struct PlanetaryGadgetState {
+	bool hasLoyaltyBooster = false;
+	bool hasHappinessBooster = false;
+	bool hasUberTurret = false;
+	bool hasSpiceStorage = false;
+	bool hasBioProtector = false;
+};
 
 class cPlayerDefensiveShipsManager 
 	: public Simulator::cStrategy
