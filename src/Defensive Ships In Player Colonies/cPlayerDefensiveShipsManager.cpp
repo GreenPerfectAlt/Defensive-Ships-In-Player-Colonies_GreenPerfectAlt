@@ -53,13 +53,15 @@ void cPlayerDefensiveShipsManager::Initialize() {
 	lastUpkeepTime = 0;
 	unpaidUpkeepCycles = 0;
 	upkeepIntervalMs = 180000; // 3 минуты по умолчанию
+	hadLoyaltyBoosterOnOrbit = false;
 
 	configFleetMultiplier = 1.0f;
 	configRebellionMultiplier = 1.0f;
 	configUpkeepMultiplier = 1.0f;
 	configCityUnrestMultiplier = 1.0f;
+	configGadgetMultiplier = 1.0f;
 	lastActivePlanet = nullptr;
-
+	
 	playerOutpostDefenders   = 5;
 	playerColonyDefenders    = 10;
 	playerHomeworldDefenders = 20;
