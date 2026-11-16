@@ -226,13 +226,13 @@ jobs:
           done
 
           mkdir -p config_rebel/SpaceCombat~
-          printf "float 0x07A1BC02 0.0\nfloat 0x07A1BC0F 0.0\nfloat 0x07A1BC10 300000.0\nfloat 0x07A1BC11 999.0\nfloat 0x07A1BC12 0.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
+          printf "float 0x07A1BC02 0.0\nfloat 0x07A1BC0F 0.0\nfloat 0x07A1BC10 0.0\nfloat 0x07A1BC11 999.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_00x.package"
-          printf "float 0x07A1BC02 0.5\nfloat 0x07A1BC0F 180000.0\nfloat 0x07A1BC10 150000.0\nfloat 0x07A1BC11 8.0\nfloat 0x07A1BC12 20.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
+          printf "float 0x07A1BC02 0.5\nfloat 0x07A1BC0F 120.0\nfloat 0x07A1BC10 300.0\nfloat 0x07A1BC11 8.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_05x.package"
-          printf "float 0x07A1BC02 1.0\nfloat 0x07A1BC0F 240000.0\nfloat 0x07A1BC10 90000.0\nfloat 0x07A1BC11 6.0\nfloat 0x07A1BC12 28.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
+          printf "float 0x07A1BC02 1.0\nfloat 0x07A1BC0F 240.0\nfloat 0x07A1BC10 180.0\nfloat 0x07A1BC11 6.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_10x.package"
-          printf "float 0x07A1BC02 1.5\nfloat 0x07A1BC0F 360000.0\nfloat 0x07A1BC10 60000.0\nfloat 0x07A1BC11 5.0\nfloat 0x07A1BC12 38.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
+          printf "float 0x07A1BC02 1.5\nfloat 0x07A1BC0F 360.0\nfloat 0x07A1BC10 110.0\nfloat 0x07A1BC11 5.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_15x.package"
 
           mkdir -p config_upkeep/SpaceCombat~
