@@ -5,7 +5,7 @@
      installerSystemVersion="1.0.1.2"
      hasCustomInstaller="true"
      dllsBuild="$SPOREMOD_DLLS_BUILD"
-     isExperimental="$SPOREMOD_EXPERIMENTAL"
+     isExperimental="$SPOREMOD_EXPERIMENTAL">
 
     <prerequisite>Defensive Ships In Player Colonies.dll</prerequisite>
 
