@@ -1,6 +1,6 @@
 <mod unique="Defensive_Ships_In_Player_Colonies"
      displayName="Defensive Ships in Player Colonies"
-     description="Dynamically deploys defensive fleets, 4X fleet upkeep, colony gadget synergies, and orbital mutiny mechanics."
+     description="4X Colony Garrisons &amp; Master Config Hub. Deploys dynamic defense fleets, fleet upkeep, strikes, gadget synergies, and configures Space Diplomacy &amp; Warfare Overhaul (3D Trade Convoys, Philosophy Doctrines, Dreadnoughts &amp; Galactic Secessions)."
      installerSystemVersion="1.0.1.2"
      hasCustomInstaller="true"
      dllsBuild="$SPOREMOD_DLLS_BUILD"
@@ -14,97 +14,97 @@
                    description="Lightweight garrisons (10-15 vessels max) for low-end PCs.">Fleet_02x.package</component>
         <component unique="Fleet_05x"
                    displayName="Low (0.5x)"
-                   description="Small task forces (up to 25 vessels).">Fleet_05x.package</component>
+                   description="Small task forces (up to 25 vessels) with minimal performance impact.">Fleet_05x.package</component>
         <component unique="Fleet_10x"
                    displayName="Normal (1.0x)"
-                   description="Balanced 4X gameplay: dynamic Soft-Cap based on stars and captain rank."
+                   description="Balanced 4X gameplay: dynamic Soft-Cap scaling with T-Score, Unlimited-Colony cities, stars, and weaponry rank."
                    defaultChecked="true">Fleet_10x.package</component>
         <component unique="Fleet_13x"
                    displayName="Reinforced (1.3x)"
-                   description="Fortified garrisons (up to 65 vessels).">Fleet_13x.package</component>
+                   description="Fortified orbital garrisons (up to 65 vessels on developed hubs).">Fleet_13x.package</component>
         <component unique="Fleet_15x"
                    displayName="Ultra (1.5x)"
-                   description="Massive sector armadas for powerful systems.">Fleet_15x.package</component>
+                   description="Massive sector armadas for high-end systems and intense planetary sieges.">Fleet_15x.package</component>
     </componentGroup>
 
-    <componentGroup unique="ColonialRebellionsGroup" displayName="Colonial Rebellions">
+    <componentGroup unique="ColonialRebellionsGroup" displayName="Colonial Rebellions &amp; Secessions">
         <component unique="Rebellion_Disabled"
                    displayName="Disabled (0.0x)"
-                   description="No garrison mutinies or peacetime uprisings under any circumstances.">Rebellion_Disabled.package</component>
+                   description="100% loyal fleets: disables player/AI garrison mutinies, Zealot Schisms, and background star secessions.">Rebellion_Disabled.package</component>
         <component unique="Rebellion_Low"
                    displayName="Stable (0.5x)"
-                   description="Reduced mutiny probability across all colonies and NPC worlds.">Rebellion_Low.package</component>
+                   description="Mild unrest: rare mutinies, shorter 120s Zealot Schisms, and breakaway republics only in 8+ star bankrupt empires.">Rebellion_Low.package</component>
         <component unique="Rebellion_Enabled"
                    displayName="Standard (1.0x)"
-                   description="Full 4X unrest: mutinies from bankruptcy, siege losses, frontier distance, and strikes."
+                   description="Full 4X politics: mutinies from bankruptcy/losses, 240s Zealot Schism cascades, SOS alerts, and secessions in 6+ star giants."
                    defaultChecked="true">Rebellion_Enabled.package</component>
         <component unique="Rebellion_Anarchy"
                    displayName="Anarchy (2.0x)"
-                   description="Double rebellion and civil war frequency across the galaxy.">Rebellion_Anarchy.package</component>
+                   description="Volatile galaxy: double mutiny rates, 360s Zealot Schisms, frequent SOS uprisings, and breakaway republics from 5+ star empires.">Rebellion_Anarchy.package</component>
     </componentGroup>
 
     <componentGroup unique="FleetUpkeepGroup" displayName="Fleet Upkeep">
         <component unique="Upkeep_00x"
                    displayName="Disabled (0.0x)"
-                   description="Free peacetime garrisons with zero periodic maintenance costs.">Upkeep_00x.package</component>
+                   description="Free peacetime garrisons with zero periodic Sporebuck maintenance costs.">Upkeep_00x.package</component>
         <component unique="Upkeep_05x"
                    displayName="Low (0.5x)"
-                   description="Light maintenance every 4 minutes; high spice self-sufficiency.">Upkeep_05x.package</component>
+                   description="Light payroll every 4 minutes; high local spice self-sufficiency for player and AI treasuries.">Upkeep_05x.package</component>
         <component unique="Upkeep_10x"
                    displayName="Standard (1.0x)"
-                   description="Balanced payroll every 3 minutes; rare spices offset local garrison costs."
+                   description="Balanced maintenance every 3 minutes; rare spices and trade offset garrison expenses."
                    defaultChecked="true">Upkeep_10x.package</component>
         <component unique="Upkeep_20x"
                    displayName="Hardcore (2.0x)"
-                   description="Heavy military budget every 2 minutes; poor outposts drain the treasury fast.">Upkeep_20x.package</component>
+                   description="Strict military budget every 2 minutes; overextended empires without trade risk bankruptcy fast.">Upkeep_20x.package</component>
     </componentGroup>
 
     <componentGroup unique="CityUnrestGroup" displayName="City Unrest Impact">
         <component unique="Unrest_00x"
                    displayName="Ignored (0.0x)"
-                   description="Unhappy citizens and factory sweatshops never affect shipyards or loyalty.">Unrest_00x.package</component>
+                   description="Unhappy citizens and excess factories never slow down shipyards or provoke strikes.">Unrest_00x.package</component>
         <component unique="Unrest_05x"
                    displayName="Mild (0.5x)"
-                   description="Minor shipyard slowdowns and low uprising chance from unhappy cities.">Unrest_05x.package</component>
+                   description="Minor shipyard slowdowns and low strike pressure from unhappy industrial cities.">Unrest_05x.package</component>
         <component unique="Unrest_10x"
                    displayName="Standard (1.0x)"
-                   description="Factory strikes slow shipyards and risk peacetime orbital civil wars."
+                   description="Factory sweatshops and blockades slow shipyards and spark Scientist/Ecologist wartime strikes."
                    defaultChecked="true">Unrest_10x.package</component>
         <component unique="Unrest_20x"
                    displayName="Volatile (2.0x)"
-                   description="Neglected factory colonies rapidly erupt into full-scale orbital mutinies.">Unrest_20x.package</component>
+                   description="Neglected factory colonies rapidly erupt into shipyard paralysis and orbital mutinies.">Unrest_20x.package</component>
     </componentGroup>
 
-    <componentGroup unique="ColonyGadgetsGroup" displayName="Colony Gadgets">
+    <componentGroup unique="ColonyGadgetsGroup" displayName="Colony Gadgets &amp; Lore Powers">
         <component unique="Gadget_00x"
                    displayName="Vanilla (0.0x)"
-                   description="Disable custom bonuses from Loyalty/Happiness Boosters, Uber Turret, and ship tools.">Gadget_00x.package</component>
+                   description="Disables custom gadget synergies, Uber-Dreadnoughts, Embassies, Shaman Astral Wardens/Rebirth, and Ecologist Bio-Regen.">Gadget_00x.package</component>
         <component unique="Gadget_05x"
                    displayName="Moderate (0.5x)"
-                   description="Half-strength bonuses from planetary colonization modules and pacification tools.">Gadget_05x.package</component>
+                   description="Half-strength bonuses for planetary buildings, riot-control tools, Shaman portals, and Ecologist regeneration.">Gadget_05x.package</component>
         <component unique="Gadget_10x"
                    displayName="Standard (1.0x)"
-                   description="Full synergy with Loyalty/Happiness Boosters, Uber Turret, Spice Storage, Bio-Domes, and Mind Erase."
+                   description="Full 4X synergy: Spice Depots, Uber-Dreadnoughts, Embassies, Shaman Astral Nexus &amp; Rebirth, Ecologist Bio-Regen &amp; Necrosis."
                    defaultChecked="true">Gadget_10x.package</component>
         <component unique="Gadget_15x"
                    displayName="Amplified (1.5x)"
-                   description="Boosted shield coordination, upkeep discounts, and rebellion suppression from gadgets.">Gadget_15x.package</component>
+                   description="Maximum tactical impact from colonization buildings, ship siege tools, and philosophy lore abilities.">Gadget_15x.package</component>
     </componentGroup>
-     
-    <componentGroup unique="GalacticTradeGroup" displayName="Galactic Trade">
+
+    <componentGroup unique="GalacticTradeGroup" displayName="Galactic Trade &amp; 3D Convoys">
         <component unique="Trade_00x"
                    displayName="Disabled (0.0x)"
-                   description="Disable dynamic AI trade routes, spice arbitrage profits, and 3D freighter convoys.">Trade_00x.package</component>
+                   description="Disables dynamic AI trade networks, spice arbitrage profits, war deterrence, and 3D orbital cargo convoys.">Trade_00x.package</component>
         <component unique="Trade_05x"
                    displayName="Modest (0.5x)"
-                   description="Conservative trade income, mild spice arbitrage, and up to 3 routes per empire.">Trade_05x.package</component>
+                   description="Conservative trade income, compact 3D freighter wings, and up to 3 base routes per empire.">Trade_05x.package</component>
         <component unique="Trade_10x"
                    displayName="Standard (1.0x)"
-                   description="Balanced 4X trade network: spice price arbitrage, blockade unrest, war shock, and 3D convoys."
+                   description="Living spaceports: two-way player &amp; multi-species 3D convoys, convoy plundering, war shock, and 5 base routes per empire."
                    defaultChecked="true">Trade_10x.package</component>
         <component unique="Trade_15x"
                    displayName="Booming (1.5x)"
-                   description="High-yield spice arbitrage, strong trade peace deterrence, and up to 8 routes per empire.">Trade_15x.package</component>
+                   description="Bustling galactic hubs: dense 3D cargo fleets, high-yield rare spice arbitrage, and up to 8 base routes per empire.">Trade_15x.package</component>
     </componentGroup>
-     
+
 </mod>
