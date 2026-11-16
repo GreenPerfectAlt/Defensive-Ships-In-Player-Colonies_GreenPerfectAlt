@@ -1,110 +1,168 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <mod unique="Defensive_Ships_In_Player_Colonies"
      displayName="Defensive Ships in Player Colonies"
-     description="4X Colony Garrisons &amp; Master Config Hub. Deploys dynamic defense fleets, fleet upkeep, strikes, gadget synergies, and configures Space Diplomacy &amp; Warfare Overhaul (3D Trade Convoys, Philosophy Doctrines, Dreadnoughts &amp; Galactic Secessions)."
+     description="4X Colony Garrisons &amp; Master Config Hub (Part 1). Deploys dynamic defense fleets, fleet upkeep, strikes, gadget synergies, and configures Space Diplomacy &amp; Warfare Overhaul (3D Trade Convoys, Philosophy Doctrines, Dreadnoughts &amp; Galactic Secessions)."
      installerSystemVersion="1.0.1.2"
      hasCustomInstaller="true"
      dllsBuild="$SPOREMOD_DLLS_BUILD"
-     isExperimental="$SPOREMOD_EXPERIMENTAL">
+     isExperimental="$SPOREMOD_EXPERIMENTAL"
 
     <prerequisite>Defensive Ships In Player Colonies.dll</prerequisite>
 
     <componentGroup unique="FleetScalingGroup" displayName="Fleet Scaling">
-        <component unique="Fleet_02x"
+        <component game="GalacticAdventures" unique="Fleet_02x"
                    displayName="Minimal (0.2x)"
-                   description="Lightweight garrisons (10-15 vessels max) for low-end PCs.">Fleet_02x.package</component>
-        <component unique="Fleet_05x"
+                   description="Lightweight garrisons (10-15 vessels max) for low-end PCs."
+                   defaultChecked="false">Fleet_02x.package</component>
+        <component game="GalacticAdventures" unique="Fleet_05x"
                    displayName="Low (0.5x)"
-                   description="Small task forces (up to 25 vessels) with minimal performance impact.">Fleet_05x.package</component>
-        <component unique="Fleet_10x"
+                   description="Small task forces (up to 25 vessels) with minimal performance impact."
+                   defaultChecked="false">Fleet_05x.package</component>
+        <component game="GalacticAdventures" unique="Fleet_10x"
                    displayName="Normal (1.0x)"
                    description="Balanced 4X gameplay: dynamic Soft-Cap scaling with T-Score, Unlimited-Colony cities, stars, and weaponry rank."
                    defaultChecked="true">Fleet_10x.package</component>
-        <component unique="Fleet_13x"
+        <component game="GalacticAdventures" unique="Fleet_13x"
                    displayName="Reinforced (1.3x)"
-                   description="Fortified orbital garrisons (up to 65 vessels on developed hubs).">Fleet_13x.package</component>
-        <component unique="Fleet_15x"
+                   description="Fortified orbital garrisons (up to 65 vessels on developed hubs)."
+                   defaultChecked="false">Fleet_13x.package</component>
+        <component game="GalacticAdventures" unique="Fleet_15x"
                    displayName="Ultra (1.5x)"
-                   description="Massive sector armadas for high-end systems and intense planetary sieges.">Fleet_15x.package</component>
+                   description="Massive sector armadas for high-end systems and intense planetary sieges."
+                   defaultChecked="false">Fleet_15x.package</component>
     </componentGroup>
 
     <componentGroup unique="ColonialRebellionsGroup" displayName="Colonial Rebellions &amp; Secessions">
-        <component unique="Rebellion_Disabled"
+        <component game="GalacticAdventures" unique="Rebellion_Disabled"
                    displayName="Disabled (0.0x)"
-                   description="100% loyal fleets: disables player/AI garrison mutinies, Zealot Schisms, and background star secessions.">Rebellion_Disabled.package</component>
-        <component unique="Rebellion_Low"
+                   description="100% loyal fleets: disables player/AI garrison mutinies, Zealot Schisms, and background star secessions."
+                   defaultChecked="false">Rebel_00x.package</component>
+        <component game="GalacticAdventures" unique="Rebellion_Low"
                    displayName="Stable (0.5x)"
-                   description="Mild unrest: rare mutinies, shorter 120s Zealot Schisms, and breakaway republics only in 8+ star bankrupt empires.">Rebellion_Low.package</component>
-        <component unique="Rebellion_Enabled"
+                   description="Mild unrest: rare mutinies, shorter 120s Zealot Schisms, and breakaway republics only in 8+ star bankrupt empires."
+                   defaultChecked="false">Rebel_05x.package</component>
+        <component game="GalacticAdventures" unique="Rebellion_Enabled"
                    displayName="Standard (1.0x)"
                    description="Full 4X politics: mutinies from bankruptcy/losses, 240s Zealot Schism cascades, SOS alerts, and secessions in 6+ star giants."
-                   defaultChecked="true">Rebellion_Enabled.package</component>
-        <component unique="Rebellion_Anarchy"
+                   defaultChecked="true">Rebel_10x.package</component>
+        <component game="GalacticAdventures" unique="Rebellion_Anarchy"
                    displayName="Anarchy (2.0x)"
-                   description="Volatile galaxy: double mutiny rates, 360s Zealot Schisms, frequent SOS uprisings, and breakaway republics from 5+ star empires.">Rebellion_Anarchy.package</component>
+                   description="Volatile galaxy: double mutiny rates, 360s Zealot Schisms, frequent SOS uprisings, and breakaway republics from 5+ star empires."
+                   defaultChecked="false">Rebel_20x.package</component>
     </componentGroup>
 
     <componentGroup unique="FleetUpkeepGroup" displayName="Fleet Upkeep">
-        <component unique="Upkeep_00x"
+        <component game="GalacticAdventures" unique="Upkeep_00x"
                    displayName="Disabled (0.0x)"
-                   description="Free peacetime garrisons with zero periodic Sporebuck maintenance costs.">Upkeep_00x.package</component>
-        <component unique="Upkeep_05x"
+                   description="Free peacetime garrisons with zero periodic Sporebuck maintenance costs."
+                   defaultChecked="false">Upkeep_00x.package</component>
+        <component game="GalacticAdventures" unique="Upkeep_05x"
                    displayName="Low (0.5x)"
-                   description="Light payroll every 4 minutes; high local spice self-sufficiency for player and AI treasuries.">Upkeep_05x.package</component>
-        <component unique="Upkeep_10x"
+                   description="Light payroll every 4 minutes; high local spice self-sufficiency for player and AI treasuries."
+                   defaultChecked="false">Upkeep_05x.package</component>
+        <component game="GalacticAdventures" unique="Upkeep_10x"
                    displayName="Standard (1.0x)"
                    description="Balanced maintenance every 3 minutes; rare spices and trade offset garrison expenses."
                    defaultChecked="true">Upkeep_10x.package</component>
-        <component unique="Upkeep_20x"
+        <component game="GalacticAdventures" unique="Upkeep_20x"
                    displayName="Hardcore (2.0x)"
-                   description="Strict military budget every 2 minutes; overextended empires without trade risk bankruptcy fast.">Upkeep_20x.package</component>
+                   description="Strict military budget every 2 minutes; overextended empires without trade risk bankruptcy fast."
+                   defaultChecked="false">Upkeep_20x.package</component>
     </componentGroup>
 
     <componentGroup unique="CityUnrestGroup" displayName="City Unrest Impact">
-        <component unique="Unrest_00x"
+        <component game="GalacticAdventures" unique="Unrest_00x"
                    displayName="Ignored (0.0x)"
-                   description="Unhappy citizens and excess factories never slow down shipyards or provoke strikes.">Unrest_00x.package</component>
-        <component unique="Unrest_05x"
+                   description="Unhappy citizens and excess factories never slow down shipyards or provoke strikes."
+                   defaultChecked="false">Unrest_00x.package</component>
+        <component game="GalacticAdventures" unique="Unrest_05x"
                    displayName="Mild (0.5x)"
-                   description="Minor shipyard slowdowns and low strike pressure from unhappy industrial cities.">Unrest_05x.package</component>
-        <component unique="Unrest_10x"
+                   description="Minor shipyard slowdowns and low strike pressure from unhappy industrial cities."
+                   defaultChecked="false">Unrest_05x.package</component>
+        <component game="GalacticAdventures" unique="Unrest_10x"
                    displayName="Standard (1.0x)"
                    description="Factory sweatshops and blockades slow shipyards and spark Scientist/Ecologist wartime strikes."
                    defaultChecked="true">Unrest_10x.package</component>
-        <component unique="Unrest_20x"
+        <component game="GalacticAdventures" unique="Unrest_20x"
                    displayName="Volatile (2.0x)"
-                   description="Neglected factory colonies rapidly erupt into shipyard paralysis and orbital mutinies.">Unrest_20x.package</component>
+                   description="Neglected factory colonies rapidly erupt into shipyard paralysis and orbital mutinies."
+                   defaultChecked="false">Unrest_20x.package</component>
     </componentGroup>
 
     <componentGroup unique="ColonyGadgetsGroup" displayName="Colony Gadgets &amp; Lore Powers">
-        <component unique="Gadget_00x"
+        <component game="GalacticAdventures" unique="Gadget_00x"
                    displayName="Vanilla (0.0x)"
-                   description="Disables custom gadget synergies, Uber-Dreadnoughts, Embassies, Shaman Astral Wardens/Rebirth, and Ecologist Bio-Regen.">Gadget_00x.package</component>
-        <component unique="Gadget_05x"
+                   description="Disables custom gadget synergies, Uber-Dreadnoughts, Embassies, Shaman Astral Wardens/Rebirth, and Ecologist Bio-Regen."
+                   defaultChecked="false">Gadget_00x.package</component>
+        <component game="GalacticAdventures" unique="Gadget_05x"
                    displayName="Moderate (0.5x)"
-                   description="Half-strength bonuses for planetary buildings, riot-control tools, Shaman portals, and Ecologist regeneration.">Gadget_05x.package</component>
-        <component unique="Gadget_10x"
+                   description="Half-strength bonuses for planetary buildings, riot-control tools, Shaman portals, and Ecologist regeneration."
+                   defaultChecked="false">Gadget_05x.package</component>
+        <component game="GalacticAdventures" unique="Gadget_10x"
                    displayName="Standard (1.0x)"
                    description="Full 4X synergy: Spice Depots, Uber-Dreadnoughts, Embassies, Shaman Astral Nexus &amp; Rebirth, Ecologist Bio-Regen &amp; Necrosis."
                    defaultChecked="true">Gadget_10x.package</component>
-        <component unique="Gadget_15x"
+        <component game="GalacticAdventures" unique="Gadget_15x"
                    displayName="Amplified (1.5x)"
-                   description="Maximum tactical impact from colonization buildings, ship siege tools, and philosophy lore abilities.">Gadget_15x.package</component>
+                   description="Maximum tactical impact from colonization buildings, ship siege tools, and philosophy lore abilities."
+                   defaultChecked="false">Gadget_15x.package</component>
     </componentGroup>
 
     <componentGroup unique="GalacticTradeGroup" displayName="Galactic Trade &amp; 3D Convoys">
-        <component unique="Trade_00x"
+        <component game="GalacticAdventures" unique="Trade_00x"
                    displayName="Disabled (0.0x)"
-                   description="Disables dynamic AI trade networks, spice arbitrage profits, war deterrence, and 3D orbital cargo convoys.">Trade_00x.package</component>
-        <component unique="Trade_05x"
+                   description="Disables dynamic AI trade networks, spice arbitrage profits, war deterrence, and 3D orbital cargo convoys."
+                   defaultChecked="false">Trade_00x.package</component>
+        <component game="GalacticAdventures" unique="Trade_05x"
                    displayName="Modest (0.5x)"
-                   description="Conservative trade income, compact 3D freighter wings, and up to 3 base routes per empire.">Trade_05x.package</component>
-        <component unique="Trade_10x"
+                   description="Conservative trade income, compact 3D freighter wings, and up to 3 base routes per empire."
+                   defaultChecked="false">Trade_05x.package</component>
+        <component game="GalacticAdventures" unique="Trade_10x"
                    displayName="Standard (1.0x)"
                    description="Living spaceports: two-way player &amp; multi-species 3D convoys, convoy plundering, war shock, and 5 base routes per empire."
                    defaultChecked="true">Trade_10x.package</component>
-        <component unique="Trade_15x"
+        <component game="GalacticAdventures" unique="Trade_15x"
                    displayName="Booming (1.5x)"
-                   description="Bustling galactic hubs: dense 3D cargo fleets, high-yield rare spice arbitrage, and up to 8 base routes per empire.">Trade_15x.package</component>
+                   description="Bustling galactic hubs: dense 3D cargo fleets, high-yield rare spice arbitrage, and up to 8 base routes per empire."
+                   defaultChecked="false">Trade_15x.package</component>
     </componentGroup>
 
+    <!-- Clean removal on reinstall / preset change -->
+    <remove>Defensive Ships In Player Colonies.dll</remove>
+
+    <remove game="GalacticAdventures">Fleet_02x.package</remove>
+    <remove game="GalacticAdventures">Fleet_05x.package</remove>
+    <remove game="GalacticAdventures">Fleet_10x.package</remove>
+    <remove game="GalacticAdventures">Fleet_13x.package</remove>
+    <remove game="GalacticAdventures">Fleet_15x.package</remove>
+
+    <remove game="GalacticAdventures">Rebel_00x.package</remove>
+    <remove game="GalacticAdventures">Rebel_05x.package</remove>
+    <remove game="GalacticAdventures">Rebel_10x.package</remove>
+    <remove game="GalacticAdventures">Rebel_15x.package</remove>
+    <remove game="GalacticAdventures">Rebel_20x.package</remove>
+    <remove game="GalacticAdventures">Rebellion_Disabled.package</remove>
+    <remove game="GalacticAdventures">Rebellion_Low.package</remove>
+    <remove game="GalacticAdventures">Rebellion_Enabled.package</remove>
+    <remove game="GalacticAdventures">Rebellion_Anarchy.package</remove>
+
+    <remove game="GalacticAdventures">Upkeep_00x.package</remove>
+    <remove game="GalacticAdventures">Upkeep_05x.package</remove>
+    <remove game="GalacticAdventures">Upkeep_10x.package</remove>
+    <remove game="GalacticAdventures">Upkeep_20x.package</remove>
+
+    <remove game="GalacticAdventures">Unrest_00x.package</remove>
+    <remove game="GalacticAdventures">Unrest_05x.package</remove>
+    <remove game="GalacticAdventures">Unrest_10x.package</remove>
+    <remove game="GalacticAdventures">Unrest_20x.package</remove>
+
+    <remove game="GalacticAdventures">Gadget_00x.package</remove>
+    <remove game="GalacticAdventures">Gadget_05x.package</remove>
+    <remove game="GalacticAdventures">Gadget_10x.package</remove>
+    <remove game="GalacticAdventures">Gadget_15x.package</remove>
+
+    <remove game="GalacticAdventures">Trade_00x.package</remove>
+    <remove game="GalacticAdventures">Trade_05x.package</remove>
+    <remove game="GalacticAdventures">Trade_10x.package</remove>
+    <remove game="GalacticAdventures">Trade_15x.package</remove>
 </mod>
