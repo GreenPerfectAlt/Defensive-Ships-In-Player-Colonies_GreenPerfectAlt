@@ -253,11 +253,18 @@ jobs:
           done
 
           mkdir -p config_gadget/SpaceCombat~
-          for mult in 0.0 0.5 1.0 1.5; do
-            tag=$(echo "$mult" | tr -d '.')
-            printf "float 0x07A1BC06 %s\n" "$mult" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
-            java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_${tag}x.package"
-          done
+          printf "float 0x07A1BC06 0.0\nfloat 0x07A1BC12 0.0\nfloat 0x07A1BC13 0.0\nfloat 0x07A1BC14 0.0\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_00x.package"
+
+          printf "float 0x07A1BC06 0.5\nfloat 0x07A1BC12 0.22\nfloat 0x07A1BC13 0.15\nfloat 0x07A1BC14 30.0\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_05x.package"
+
+          printf "float 0x07A1BC06 1.0\nfloat 0x07A1BC12 0.38\nfloat 0x07A1BC13 0.30\nfloat 0x07A1BC14 60.0\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_10x.package"
+
+          printf "float 0x07A1BC06 1.5\nfloat 0x07A1BC12 0.52\nfloat 0x07A1BC13 0.45\nfloat 0x07A1BC14 90.0\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_15x.package"
+
 
           mkdir -p config_trade/SpaceCombat~
           printf "float 0x07A1BC07 0.0\nfloat 0x07A1BC08 0.0\nfloat 0x07A1BC09 0.0\nfloat 0x07A1BC0A 1.0\nfloat 0x07A1BC0B 2.0\nfloat 0x07A1BC0C 0.0\nfloat 0x07A1BC0D 1.0\nfloat 0x07A1BC0E 0.0\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
