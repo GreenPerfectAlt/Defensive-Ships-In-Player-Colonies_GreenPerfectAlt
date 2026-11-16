@@ -232,8 +232,8 @@ jobs:
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_05x.package"
           printf "float 0x07A1BC02 1.0\nfloat 0x07A1BC0F 240.0\nfloat 0x07A1BC10 180.0\nfloat 0x07A1BC11 6.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_10x.package"
-          printf "float 0x07A1BC02 1.5\nfloat 0x07A1BC0F 360.0\nfloat 0x07A1BC10 110.0\nfloat 0x07A1BC11 5.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
-          java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_15x.package"
+          printf "float 0x07A1BC02 2.0\nfloat 0x07A1BC0F 360.0\nfloat 0x07A1BC10 110.0\nfloat 0x07A1BC11 5.0\n" > config_rebel/SpaceCombat~/RebellionConfig.prop.txt
+          java -jar "SporeModder FX/SporeModderFX.jar" pack config_rebel "${{ github.workspace }}/Sporemod/Rebel_20x.package"
 
           mkdir -p config_upkeep/SpaceCombat~
           printf "float 0x07A1BC03 0.0\nfloat 0x07A1BC05 180.0\n" > config_upkeep/SpaceCombat~/UpkeepConfig.prop.txt
@@ -255,29 +255,22 @@ jobs:
           mkdir -p config_gadget/SpaceCombat~
           printf "float 0x07A1BC06 0.0\nfloat 0x07A1BC12 0.0\nfloat 0x07A1BC13 0.0\nfloat 0x07A1BC14 0.0\nfloat 0x07A1BC15 0.0\nfloat 0x07A1BC16 0.0\nfloat 0x07A1BC17 0.0\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_00x.package"
-
           printf "float 0x07A1BC06 0.5\nfloat 0x07A1BC12 0.22\nfloat 0x07A1BC13 0.15\nfloat 0x07A1BC14 30.0\nfloat 0x07A1BC15 0.03\nfloat 0x07A1BC16 25.0\nfloat 0x07A1BC17 0.18\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_05x.package"
-
           printf "float 0x07A1BC06 1.0\nfloat 0x07A1BC12 0.38\nfloat 0x07A1BC13 0.30\nfloat 0x07A1BC14 60.0\nfloat 0x07A1BC15 0.06\nfloat 0x07A1BC16 45.0\nfloat 0x07A1BC17 0.35\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_10x.package"
-
           printf "float 0x07A1BC06 1.5\nfloat 0x07A1BC12 0.52\nfloat 0x07A1BC13 0.45\nfloat 0x07A1BC14 90.0\nfloat 0x07A1BC15 0.09\nfloat 0x07A1BC16 65.0\nfloat 0x07A1BC17 0.50\n" > config_gadget/SpaceCombat~/GadgetConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_gadget "${{ github.workspace }}/Sporemod/Gadget_15x.package"
 
           mkdir -p config_trade/SpaceCombat~
           printf "float 0x07A1BC07 0.0\nfloat 0x07A1BC08 0.0\nfloat 0x07A1BC09 0.0\nfloat 0x07A1BC0A 1.0\nfloat 0x07A1BC0B 2.0\nfloat 0x07A1BC0C 0.0\nfloat 0x07A1BC0D 1.0\nfloat 0x07A1BC0E 0.0\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_00x.package"
-
           printf "float 0x07A1BC07 0.5\nfloat 0x07A1BC08 0.7\nfloat 0x07A1BC09 0.6\nfloat 0x07A1BC0A 3.0\nfloat 0x07A1BC0B 2.0\nfloat 0x07A1BC0C 0.6\nfloat 0x07A1BC0D 1.20\nfloat 0x07A1BC0E 0.06\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_05x.package"
-
           printf "float 0x07A1BC07 1.0\nfloat 0x07A1BC08 1.0\nfloat 0x07A1BC09 1.0\nfloat 0x07A1BC0A 5.0\nfloat 0x07A1BC0B 2.0\nfloat 0x07A1BC0C 1.0\nfloat 0x07A1BC0D 1.35\nfloat 0x07A1BC0E 0.10\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_10x.package"
-
           printf "float 0x07A1BC07 1.5\nfloat 0x07A1BC08 1.5\nfloat 0x07A1BC09 1.5\nfloat 0x07A1BC0A 8.0\nfloat 0x07A1BC0B 2.0\nfloat 0x07A1BC0C 1.5\nfloat 0x07A1BC0D 1.45\nfloat 0x07A1BC0E 0.14\n" > config_trade/SpaceCombat~/TradeConfig.prop.txt
           java -jar "SporeModder FX/SporeModderFX.jar" pack config_trade "${{ github.workspace }}/Sporemod/Trade_15x.package"
-
 
       - name: Find latest ModAPI DLLs build
         id: find-latest-dlls-build
