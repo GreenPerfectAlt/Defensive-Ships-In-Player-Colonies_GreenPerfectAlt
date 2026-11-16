@@ -2,7 +2,8 @@
 
 **Platform:** Spore: Galactic Adventures (`v1.0.9+`)  
 **Requires:** Spore ModAPI Launcher Kit  
-**Companion Mod:** [Space Diplomacy & Warfare Overhaul](/GreenPerfectAlt/Space-Diplomacy-And-Warfare-Overhaul_GreenPerfectAlt)
+**Companion Mod:** [Space Diplomacy & Warfare Overhaul](https://github.com/GreenPerfectAlt/Space-Diplomacy-And-Warfare-Overhaul_GreenPerfectAlt)
+
 
 **Defensive Ships in Player Colonies** transforms passive Spore colonies into living, defended 4X bastions—and serves as the **master XML configuration hub** for our two-mod Space Stage overhaul ecosystem.
 
@@ -17,7 +18,7 @@ This mod is **Part 1** of a unified two-mod overhaul. While it works standalone 
 1. 🛡️ **Defensive Ships in Player Colonies** *(This Mod — `v1.0.9+`)*
    * Manages **your** planetary defense fleets, orbital shipyards, fleet upkeep, citizen strikes, and player colony rebellions.
    * Contains the **Interactive ModAPI Installer** (`FleetConfig`, `RebellionConfig`, `UpkeepConfig`, `UnrestConfig`, `GadgetConfig`, `TradeConfig`) that controls balance across **both** mods with zero hardcoded values!
-2. ⚔️ **[Space Diplomacy & Warfare Overhaul](/GreenPerfectAlt/Space-Diplomacy-And-Warfare-Overhaul_GreenPerfectAlt)** *(Companion Mod — `v1.1.3+`)*
+2. ⚔️ **[Space Diplomacy & Warfare Overhaul](https://github.com/GreenPerfectAlt/Space-Diplomacy-And-Warfare-Overhaul_GreenPerfectAlt)** *(Companion Mod — `v1.1.3+`)*
    * Reads your installer presets from this mod and applies all mechanics to **AI Empires**!
    * Unlocks **3D Galactic Trade Convoys** (two-way player convoys & multi-species spaceports), **Convoy Plundering**, **AI Treasury & Upkeep**, **Orbital Uber-Turret Dreadnoughts**, **Embassy Cruisers**, **The Great Zealot Schism**, and **Background Galactic Revolutions** (breakaway republics & SOS distress signals).
 
@@ -79,7 +80,7 @@ When installing `DefensiveShipsInPlayerColonies.sporemod` via the **Spore ModAPI
 
 1. Requires **Spore: Galactic Adventures** (Steam, GOG, or EA App) and the **Spore ModAPI Launcher Kit**.
 2. Download the latest **`DefensiveShipsInPlayerColonies.sporemod`** from the **[Releases](../../releases)** page of this repository.
-3. Download the latest **`Space-Diplomacy-And-Warfare-Overhaul.sporemod`** from the **[Companion Mod Releases](/GreenPerfectAlt/Space-Diplomacy-And-Warfare-Overhaul_GreenPerfectAlt/releases)**.
+3. Download the latest **`Space-Diplomacy-And-Warfare-Overhaul.sporemod`** from the **[Companion Mod Releases](https://github.com/GreenPerfectAlt/Space-Diplomacy-And-Warfare-Overhaul_GreenPerfectAlt/releases)**.
 4. Open **Spore ModAPI Easy Installer**, install both `.sporemod` files, choose your preferred presets, and launch the game via **Spore ModAPI Launcher**!
 
 ---
