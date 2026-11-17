@@ -910,45 +910,79 @@ cPlayerDefensiveShipsManager* cPlayerDefensiveShipsManager::Get() {
 
 float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, cEmpire* empire) {
 	if (!empire) empire = GetPlayerEmpire();
-	if (!empire) return 600.0f;
+	if (!empire) return 350.0f;
 
-	int weaponryRank = max(empire->GetWeaponryLevel(), 1);
+	// 1. Читаем системный массив healthDefender (0x05D67A28) напрямую из установленного боевого модуля .prop (0% хардкода!)
+	eastl::vector<float> propDefenderHP;
+	PropertyListPtr sdoConfigKeys;
+	if (PropManager.GetPropertyList(id("ConfigurationKeys"), id("SdoConfig"), sdoConfigKeys) && sdoConfigKeys != nullptr) {
+		ResourceKey combatKey;
+		if (App::Property::GetKey(sdoConfigKeys.get(), 0x02AE237B, combatKey)) {
+			PropertyListPtr combatProp;
+			if (PropManager.GetPropertyList(combatKey.instanceID, combatKey.groupID, combatProp) && combatProp != nullptr) {
+				App::Property::GetArrayFloat(combatProp.get(), 0x05D67A28, propDefenderHP);
+			}
+		}
+	}
+	if (propDefenderHP.empty()) {
+		PropertyListPtr vanillaCombat;
+		if (PropManager.GetPropertyList(id(u"SpaceCombat"), 0x02ae0c7e, vanillaCombat) && vanillaCombat != nullptr) {
+			App::Property::GetArrayFloat(vanillaCombat.get(), 0x05D67A28, propDefenderHP);
+		}
+	}
+
+	int lvl = max(empire->GetWeaponryLevel(), 0);
+	float tableBaseHP = 300.0f;
+	if (!propDefenderHP.empty()) {
+		int idx = min(lvl, static_cast<int>(propDefenderHP.size()) - 1);
+		tableBaseHP = propDefenderHP[idx];
+	}
+
+	// 2. Плавный промышленный рост от масштаба империи (в процентах от базовой таблицы, а не +400 плоских ХП на старте!)
 	int totalStars = static_cast<int>(empire->mStars.size());
-	float imperialIndustrialBonus = min(static_cast<float>(totalStars) * 8.0f, 400.0f);
-	float dynamicBaseHealth = 450.0f + (static_cast<float>(weaponryRank) * 120.0f) + imperialIndustrialBonus;
+	float empireScaleMult = 1.0f + min(static_cast<float>(totalStars) * 0.012f, 0.35f);
 
-	float archetypeMultiplier = 1.0f;
+	// 3. Философия игрока (единая с cSpaceCombatMetrics второго мода)
+	float levelFactor = static_cast<float>(lvl + 1) / 5.0f;
 	int arch = empire->mArchetype;
-	if (arch == 1 || arch == 2 || arch == 3 || arch == 10 || arch == 11 || arch == 12 || arch == 13) {
-		archetypeMultiplier = 1.35f;
-	} else if (arch == 4 || arch == 5 || arch == 6 || arch == 14 || arch == 15 || arch == 16) {
-		archetypeMultiplier = 1.10f;
-	} else {
-		archetypeMultiplier = 0.85f;
+	float archetypeMultiplier = 1.0f;
+	if (arch == 1 || arch == 11 || arch == 13 || arch == 10) {
+		archetypeMultiplier = 1.0f + (0.30f * levelFactor); // Воины, Рыцари
+	} else if (arch == 2 || arch == 12 || arch == 4 || arch == 14) {
+		archetypeMultiplier = 1.0f + (0.10f * levelFactor); // Фанатики, Ученые
+	} else if (arch == 3 || arch == 7 || arch == 9 || arch == 17 || arch == 19) {
+		archetypeMultiplier = 1.0f - (0.15f * (1.0f - levelFactor * 0.5f)); // Барды, Дипломаты
 	}
 
-	float baseHealth = dynamicBaseHealth * archetypeMultiplier;
-	if (!planet) return baseHealth;
+	float totalHP = tableBaseHP * empireScaleMult * archetypeMultiplier;
+	if (!planet) return totalHP;
 
-	float spiceBonus = 0.0f;
-	float spicePrice = GetSpiceBasePrice(planet);
-	if (spicePrice > 3500.0f) {
-		spiceBonus = 300.0f;
-	} else if (spicePrice >= 2000.0f) {
-		spiceBonus = 200.0f;
-	} else if (spicePrice >= 600.0f) {
-		spiceBonus = 100.0f;
+	// 4. Влияние Т-индекса колонии (стимул озеленять сырые аванпосты T0/T1 до метрополий T3!)
+	float tierArmorMult = 0.80f; // T0 аванпост
+	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) tierArmorMult = 1.15f;
+	else if (planet->mType == PlanetType::T2) tierArmorMult = 1.00f;
+	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.90f;
+	totalHP *= tierArmorMult;
+
+	// 5. Логарифмический бонус от реальной цены пряности из .prop (вместо зашитых +300 ХП!)
+	float refRedPrice = 300.0f;
+	PropertyListPtr redProp;
+	if (PropManager.GetPropertyList(0x0289B83D, 0x034D97FA, redProp) && redProp != nullptr) {
+		App::Property::GetFloat(redProp.get(), 0x00B2CCCB, refRedPrice);
 	}
+	float spiceRatio = max(GetSpiceBasePrice(planet) / max(refRedPrice, 1.0f), 1.0f);
+	float spiceMult = 1.0f + min(std::log2(spiceRatio) * 0.06f, 0.25f);
+	totalHP *= spiceMult;
 
-	float turretBonus = static_cast<float>(GetTurretCount(planet)) * 15.0f;
-	float totalHP = baseHealth + spiceBonus + turretBonus;
-
+	// 6. Стационарные гаджеты и состояние казны
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
 	if (gadgets.hasUberTurret) {
-		totalHP *= (1.0f + 0.25f * configGadgetMultiplier);
+		float uberBonus = (arch == 4 || arch == 14) ? 0.40f : 0.25f;
+		totalHP *= (1.0f + uberBonus * configGadgetMultiplier);
 	}
-	if (gadgets.hasBioProtector && (arch == 4 || arch == 6 || arch == 8 || arch == 14 || arch == 16 || arch == 18)) {
-		totalHP *= (1.0f + 0.15f * configGadgetMultiplier);
+	if (gadgets.hasBioProtector) {
+		if (arch == 6 || arch == 16) totalHP *= (1.0f + 0.30f * configGadgetMultiplier);
+		else if (arch == 8 || arch == 18) totalHP *= (1.0f + 0.15f * configGadgetMultiplier);
 	}
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
@@ -958,7 +992,7 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 		totalHP *= 0.75f;
 	}
 
-	return totalHP;
+	return max(totalHP, 100.0f);
 }
 
 cGameDataUFO* cPlayerDefensiveShipsManager::SpawnDefensiveShip(cPlanetRecord* planet, cEmpire* empire, bool canRebel) {
