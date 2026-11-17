@@ -896,80 +896,65 @@ cPlayerDefensiveShipsManager* cPlayerDefensiveShipsManager::Get() {
 
 float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, cEmpire* empire) {
 	if (!empire) empire = GetPlayerEmpire();
-	if (!empire) return 350.0f;
+	if (!empire) return 300.0f;
 
-	eastl::vector<float> propDefenderHP;
-	PropertyListPtr sdoConfigKeys;
-	if (PropManager.GetPropertyList(id("ConfigurationKeys"), id("SdoConfig"), sdoConfigKeys) && sdoConfigKeys != nullptr) {
-		ResourceKey combatKey;
-		if (App::Property::GetKey(sdoConfigKeys.get(), 0x02AE237B, combatKey)) {
-			PropertyListPtr combatProp;
-			if (PropManager.GetPropertyList(combatKey.instanceID, combatKey.groupID, combatProp) && combatProp != nullptr) {
-				App::Property::GetArrayFloat(combatProp.get(), 0x05D67A28, propDefenderHP);
-			}
-		}
+	// 1. Берем за базу РЕАЛЬНЫЙ уровень обшивки корабля самого игрока (300 -> 600 -> 900 -> 1200 -> 1500+)!
+	// Рядовой бот-защитник штатно составляет 85% от флагманского корпуса командира.
+	float commanderMaxHP = 300.0f;
+	cGameDataUFO* playerUfo = Simulator::GetPlayerUFO();
+	if (playerUfo != nullptr && playerUfo->mMaxHealthPoints > 50.0f) {
+		commanderMaxHP = playerUfo->mMaxHealthPoints;
 	}
-	if (propDefenderHP.empty()) {
-		PropertyListPtr vanillaCombat;
-		if (PropManager.GetPropertyList(id(u"SpaceCombat"), 0x02ae0c7e, vanillaCombat) && vanillaCombat != nullptr) {
-			App::Property::GetArrayFloat(vanillaCombat.get(), 0x05D67A28, propDefenderHP);
-		}
-	}
+	float baseDefenderHP = commanderMaxHP * 0.85f;
 
-	int lvl = max(empire->GetWeaponryLevel(), 0);
-	float tableBaseHP = 300.0f;
-	if (!propDefenderHP.empty()) {
-		int idx = min(lvl, static_cast<int>(propDefenderHP.size()) - 1);
-		tableBaseHP = propDefenderHP[idx];
-	}
-
-	int totalStars = static_cast<int>(empire->mStars.size());
-	float empireScaleMult = 1.0f + min(static_cast<float>(totalStars) * 0.012f, 0.35f);
-
-	float levelFactor = static_cast<float>(lvl + 1) / 5.0f;
+	// 2. Философия игрока (скромная разница обшивки: +15% воинам, -10% мирным)
 	NormArch arch = GetNormalizedArchetype(empire);
 	float archetypeMultiplier = 1.0f;
 	if (arch == NormArch::Warrior || arch == NormArch::Knight || arch == NormArch::Grox) {
-		archetypeMultiplier = 1.0f + (0.30f * levelFactor);
+		archetypeMultiplier = 1.15f;
 	} else if (arch == NormArch::Zealot || arch == NormArch::Scientist) {
-		archetypeMultiplier = 1.0f + (0.10f * levelFactor);
+		archetypeMultiplier = 1.05f;
 	} else if (arch == NormArch::Bard || arch == NormArch::Diplomat) {
-		archetypeMultiplier = 1.0f - (0.15f * (1.0f - levelFactor * 0.5f));
+		archetypeMultiplier = 0.90f;
 	}
 
-	float totalHP = tableBaseHP * empireScaleMult * archetypeMultiplier;
-	if (!planet) return totalHP;
+	float totalHP = baseDefenderHP * archetypeMultiplier;
+	if (!planet) return max(totalHP, 100.0f);
 
-	float tierArmorMult = 0.80f;
-	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) tierArmorMult = 1.15f;
-	else if (planet->mType == PlanetType::T2) tierArmorMult = 1.00f;
-	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.90f;
+	// 3. Терраиндекс колонии (T0 сырой аванпост = 0.75x, T1 = 0.85x, T2 = 0.95x, T3/Столица = 1.10x)
+	float tierArmorMult = 0.75f;
+	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) tierArmorMult = 1.10f;
+	else if (planet->mType == PlanetType::T2) tierArmorMult = 0.95f;
+	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.85f;
 	totalHP *= tierArmorMult;
 
+	// 4. Небольшой бонус от ценности пряности (до +12% на фиолетовой вместо раздутия в разы)
 	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 1.0f);
-	float spiceMult = 1.0f + min(std::log2(spiceRatio) * 0.06f, 0.25f);
+	float spiceMult = 1.0f + min(std::log2(spiceRatio) * 0.03f, 0.12f);
 	totalHP *= spiceMult;
 
+	// 5. Планетарные постройки и состояние казны (аккуратная сумма бонусов без экспоненциального перемножения!)
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
+	float bonusSum = 0.0f;
 	if (gadgets.hasUberTurret) {
-		float uberBonus = (arch == NormArch::Scientist) ? 0.40f : 0.25f;
-		totalHP *= (1.0f + uberBonus * configGadgetMultiplier);
+		bonusSum += ((arch == NormArch::Scientist) ? 0.25f : 0.15f) * configGadgetMultiplier;
 	}
 	if (gadgets.hasBioProtector) {
-		if (arch == NormArch::Ecologist) totalHP *= (1.0f + 0.30f * configGadgetMultiplier);
-		else if (arch == NormArch::Shaman) totalHP *= (1.0f + 0.15f * configGadgetMultiplier);
+		if (arch == NormArch::Ecologist) bonusSum += 0.20f * configGadgetMultiplier;
+		else if (arch == NormArch::Shaman) bonusSum += 0.10f * configGadgetMultiplier;
 	}
+	totalHP *= (1.0f + bonusSum);
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
+	int totalStars = static_cast<int>(empire->mStars.size());
 	if (totalStars >= 3 && empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
-		totalHP *= 1.20f;
+		totalHP *= 1.10f;
 	} else if (empire->mEmpireMoney < max(static_cast<int>(maxTreasury * 0.15f), 15000) || unpaidUpkeepCycles > 0) {
 		totalHP *= 0.75f;
 	}
 
 	return max(totalHP, 100.0f);
 }
-
 
 cGameDataUFO* cPlayerDefensiveShipsManager::SpawnDefensiveShip(cPlanetRecord* planet, cEmpire* empire, bool canRebel) {
 	if (!empire) return nullptr;
