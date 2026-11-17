@@ -8,26 +8,33 @@ using namespace Simulator;
 void Initialize()
 {
 	cPlayerDefensiveShipsManager* playerDefensiveShipsManager = new cPlayerDefensiveShipsManager();
-	cSimulatorSystem::Get()->AddStrategy(playerDefensiveShipsManager, cPlayerDefensiveShipsManager::NOUN_ID);
 	ModAPI::AddSimulatorStrategy(playerDefensiveShipsManager, cPlayerDefensiveShipsManager::NOUN_ID);
 }
 
 void Dispose()
 {
-	// This method is called when the game is closing
 }
 
-member_detour(GeneratePlanetHighLOD__detour, cSimPlanetHighLOD, void(cPlanet* planet)) {
-	void detoured(cPlanet* planet) {
+static bool IsCurrentPlanetOwnedByPlayer(cPlanetRecord* pRec)
+{
+	if (!pRec || !IsSpaceGame()) return false;
+	uint32_t playerEmpID = GetPlayerEmpireID();
+	if (playerEmpID == 0) return false;
+
+	return (pRec->GetStarRecord() != nullptr && pRec->GetStarRecord()->mEmpireID == playerEmpID);
+}
+
+member_detour(GeneratePlanetHighLOD__detour, cSimPlanetHighLOD, void(cPlanet* planet))
+{
+	void detoured(cPlanet* planet)
+	{
 		original_function(this, planet);
 		if (!IsSpaceGame() || planet == nullptr || planet->mpPlanetRecord == nullptr || cPlayerDefensiveShipsManager::Get() == nullptr) {
 			return;
 		}
 
-		uint32_t playerEmpID = GetPlayerEmpireID();
 		bool isPlayerPlanet = (planet->GetEmpire() != nullptr && planet->GetEmpire() == GetPlayerEmpire()) ||
-		                      (planet->mpPlanetRecord->GetStarRecord() != nullptr && playerEmpID != 0 &&
-		                       planet->mpPlanetRecord->GetStarRecord()->mEmpireID == playerEmpID);
+		                      IsCurrentPlanetOwnedByPlayer(planet->mpPlanetRecord.get());
 
 		if (isPlayerPlanet) {
 			cPlayerDefensiveShipsManager::Get()->ManagePlanetDefenders(planet->mpPlanetRecord.get());
@@ -35,21 +42,27 @@ member_detour(GeneratePlanetHighLOD__detour, cSimPlanetHighLOD, void(cPlanet* pl
 	}
 };
 
-// Перехват выстрела активными приборами корабля (Стиратель памяти, Фейерверк, Луч счастья, Песнь Барда)
-member_detour(ToolStrategyOnHit__detour, cToolStrategy, bool(cSpaceToolData*, const Math::Vector3&, SpaceToolHit, int)) {
-	bool detoured(cSpaceToolData* pTool, const Math::Vector3& position, SpaceToolHit hitType, int unk) {
+// Перехват выстрела приборами корабля строго над колониями игрока (без конфликтов со 2-м модом на мирах НПС)
+member_detour(ToolStrategyOnHit__detour, cToolStrategy, bool(cSpaceToolData*, const Math::Vector3&, SpaceToolHit, int))
+{
+	bool detoured(cSpaceToolData* pTool, const Math::Vector3& position, SpaceToolHit hitType, int unk)
+	{
 		bool result = original_function(this, pTool, position, hitType, unk);
-		if (IsSpaceGame() && pTool != nullptr && cPlayerDefensiveShipsManager::Get() != nullptr) {
+		if (IsSpaceGame() && pTool != nullptr && cPlayerDefensiveShipsManager::Get() != nullptr &&
+		    GetCurrentContext() == SpaceContext::Planet && IsCurrentPlanetOwnedByPlayer(GetActivePlanetRecord())) {
 			cPlayerDefensiveShipsManager::Get()->OnPlayerToolUsed(pTool);
 		}
 		return result;
 	}
 };
 
-member_detour(ToolStrategyWhileFiring__detour, cToolStrategy, bool(cSpaceToolData*, const Math::Vector3&, int)) {
-	bool detoured(cSpaceToolData* pTool, const Math::Vector3& aimPoint, int unk) {
+member_detour(ToolStrategyWhileFiring__detour, cToolStrategy, bool(cSpaceToolData*, const Math::Vector3&, int))
+{
+	bool detoured(cSpaceToolData* pTool, const Math::Vector3& aimPoint, int unk)
+	{
 		bool result = original_function(this, pTool, aimPoint, unk);
-		if (IsSpaceGame() && pTool != nullptr && cPlayerDefensiveShipsManager::Get() != nullptr) {
+		if (IsSpaceGame() && pTool != nullptr && cPlayerDefensiveShipsManager::Get() != nullptr &&
+		    GetCurrentContext() == SpaceContext::Planet && IsCurrentPlanetOwnedByPlayer(GetActivePlanetRecord())) {
 			cPlayerDefensiveShipsManager::Get()->OnPlayerToolUsed(pTool);
 		}
 		return result;
@@ -63,12 +76,9 @@ void AttachDetours()
 	ToolStrategyWhileFiring__detour::attach(GetAddress(cToolStrategy, WhileFiring));
 }
 
-
-// Generally, you don't need to touch any code here
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-					 )
+BOOL APIENTRY DllMain(HMODULE hModule,
+                      DWORD  ul_reason_for_call,
+                      LPVOID lpReserved)
 {
 	switch (ul_reason_for_call)
 	{
