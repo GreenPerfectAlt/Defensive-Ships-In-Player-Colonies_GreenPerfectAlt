@@ -898,57 +898,92 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	if (!empire) empire = GetPlayerEmpire();
 	if (!empire) return 300.0f;
 
-	// 1. Берем за базу РЕАЛЬНЫЙ уровень обшивки корабля самого игрока (300 -> 600 -> 900 -> 1200 -> 1500+)!
-	// Рядовой бот-защитник штатно составляет 85% от флагманского корпуса командира.
-	float commanderMaxHP = 300.0f;
+	// 1. Читаем системную таблицу healthDefender (0x05D67A28) из боевого .prop конфига (0% хардкода!)
+	eastl::vector<float> propDefenderHP;
+	PropertyListPtr sdoConfigKeys;
+	if (PropManager.GetPropertyList(id("ConfigurationKeys"), id("SdoConfig"), sdoConfigKeys) && sdoConfigKeys != nullptr) {
+		ResourceKey combatKey;
+		if (App::Property::GetKey(sdoConfigKeys.get(), 0x02AE237B, combatKey)) {
+			PropertyListPtr combatProp;
+			if (PropManager.GetPropertyList(combatKey.instanceID, combatKey.groupID, combatProp) && combatProp != nullptr) {
+				App::Property::GetArrayFloat(combatProp.get(), 0x05D67A28, propDefenderHP);
+			}
+		}
+	}
+	if (propDefenderHP.empty()) {
+		PropertyListPtr vanillaCombat;
+		if (PropManager.GetPropertyList(id(u"SpaceCombat"), 0x02ae0c7e, vanillaCombat) && vanillaCombat != nullptr) {
+			App::Property::GetArrayFloat(vanillaCombat.get(), 0x05D67A28, propDefenderHP);
+		}
+	}
+
+	// 2. Вычисляем честный ранг империи игрока от числа звезд (плавная интерполяция по таблице 0..4)
+	int totalStars = static_cast<int>(empire->mStars.size());
+	float continuousTier = min(std::sqrt(max(static_cast<float>(totalStars - 1), 0.0f)) * 0.82f, 4.0f);
+
+	float empireRankHP = 300.0f;
+	if (!propDefenderHP.empty()) {
+		int maxIdx = static_cast<int>(propDefenderHP.size()) - 1;
+		int lowIdx = min(static_cast<int>(std::floor(continuousTier)), maxIdx);
+		int highIdx = min(lowIdx + 1, maxIdx);
+		float frac = continuousTier - std::floor(continuousTier);
+		empireRankHP = propDefenderHP[lowIdx] + (propDefenderHP[highIdx] - propDefenderHP[lowIdx]) * frac;
+	}
+
+	// 3. Также учитываем ХП личного флагмана игрока (берем максимум между мощью державы и апгрейдом корабля!)
+	float commanderHullHP = 255.0f;
 	cGameDataUFO* playerUfo = Simulator::GetPlayerUFO();
 	if (playerUfo != nullptr && playerUfo->mMaxHealthPoints > 50.0f) {
-		commanderMaxHP = playerUfo->mMaxHealthPoints;
+		commanderHullHP = playerUfo->mMaxHealthPoints * 0.85f;
 	}
-	float baseDefenderHP = commanderMaxHP * 0.85f;
+	float baseDefenderHP = max(empireRankHP, commanderHullHP);
 
-	// 2. Философия игрока (скромная разница обшивки: +15% воинам, -10% мирным)
+	// 4. Философия с учетом прогресса ранга (единая со 2-м модом!)
+	float levelFactor = min((continuousTier + 1.0f) / 5.0f, 1.0f);
 	NormArch arch = GetNormalizedArchetype(empire);
 	float archetypeMultiplier = 1.0f;
 	if (arch == NormArch::Warrior || arch == NormArch::Knight || arch == NormArch::Grox) {
-		archetypeMultiplier = 1.15f;
+		archetypeMultiplier = 1.0f + (0.30f * levelFactor);
 	} else if (arch == NormArch::Zealot || arch == NormArch::Scientist) {
-		archetypeMultiplier = 1.05f;
+		archetypeMultiplier = 1.0f + (0.10f * levelFactor);
 	} else if (arch == NormArch::Bard || arch == NormArch::Diplomat) {
-		archetypeMultiplier = 0.90f;
+		archetypeMultiplier = 1.0f - (0.20f * (1.0f - levelFactor * 0.5f));
 	}
 
 	float totalHP = baseDefenderHP * archetypeMultiplier;
 	if (!planet) return max(totalHP, 100.0f);
 
-	// 3. Терраиндекс колонии (T0 сырой аванпост = 0.75x, T1 = 0.85x, T2 = 0.95x, T3/Столица = 1.10x)
-	float tierArmorMult = 0.75f;
+	// 5. Т-индекс + Количество колоний (Unlimited-Colony) + Турели на самой планете!
+	float tierArmorMult = 0.80f;
 	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) tierArmorMult = 1.10f;
-	else if (planet->mType == PlanetType::T2) tierArmorMult = 0.95f;
-	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.85f;
-	totalHP *= tierArmorMult;
+	else if (planet->mType == PlanetType::T2) tierArmorMult = 0.98f;
+	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.88f;
 
-	// 4. Небольшой бонус от ценности пряности (до +12% на фиолетовой вместо раздутия в разы)
+	int colonies = max(GetColonyCount(planet), 1);
+	int turrets = GetTurretCount(planet);
+	float colonyInfraBonus = min(static_cast<float>(colonies - 1) * 0.035f, 0.25f) +
+	                         min(static_cast<float>(turrets) * 0.005f, 0.12f);
+	totalHP *= (tierArmorMult + colonyInfraBonus);
+
+	// 6. Ценность местной пряности (логарифмически из .prop)
 	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 1.0f);
-	float spiceMult = 1.0f + min(std::log2(spiceRatio) * 0.03f, 0.12f);
-	totalHP *= spiceMult;
+	totalHP *= (1.0f + min(std::log2(spiceRatio) * 0.04f, 0.16f));
 
-	// 5. Планетарные постройки и состояние казны (аккуратная сумма бонусов без экспоненциального перемножения!)
+	// 7. Планетарные постройки и состояние казны
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
-	float bonusSum = 0.0f;
+	float gadgetBonus = 0.0f;
 	if (gadgets.hasUberTurret) {
-		bonusSum += ((arch == NormArch::Scientist) ? 0.25f : 0.15f) * configGadgetMultiplier;
+		gadgetBonus += ((arch == NormArch::Scientist) ? 0.40f : 0.25f) * configGadgetMultiplier;
 	}
 	if (gadgets.hasBioProtector) {
-		if (arch == NormArch::Ecologist) bonusSum += 0.20f * configGadgetMultiplier;
-		else if (arch == NormArch::Shaman) bonusSum += 0.10f * configGadgetMultiplier;
+		if (arch == NormArch::Ecologist) gadgetBonus += 0.30f * configGadgetMultiplier;
+		else if (arch == NormArch::Shaman) gadgetBonus += 0.15f * configGadgetMultiplier;
 	}
-	totalHP *= (1.0f + bonusSum);
+	totalHP *= (1.0f + gadgetBonus);
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
-	int totalStars = static_cast<int>(empire->mStars.size());
 	if (totalStars >= 3 && empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
-		totalHP *= 1.10f;
+		totalHP *= 1.15f;
 	} else if (empire->mEmpireMoney < max(static_cast<int>(maxTreasury * 0.15f), 15000) || unpaidUpkeepCycles > 0) {
 		totalHP *= 0.75f;
 	}
