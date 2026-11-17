@@ -8,8 +8,13 @@ using namespace Simulator;
 void Initialize()
 {
 	cPlayerDefensiveShipsManager* playerDefensiveShipsManager = new cPlayerDefensiveShipsManager();
-	ModAPI::AddSimulatorStrategy(playerDefensiveShipsManager, cPlayerDefensiveShipsManager::NOUN_ID);
+	if (cSimulatorSystem::Get() != nullptr) {
+		cSimulatorSystem::Get()->AddStrategy(playerDefensiveShipsManager, cPlayerDefensiveShipsManager::NOUN_ID);
+	} else {
+		ModAPI::AddSimulatorStrategy(playerDefensiveShipsManager, cPlayerDefensiveShipsManager::NOUN_ID);
+	}
 }
+
 
 void Dispose()
 {
