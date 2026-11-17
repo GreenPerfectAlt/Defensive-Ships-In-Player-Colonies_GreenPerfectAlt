@@ -156,34 +156,49 @@ static bool MatchGadgetKey(uint32_t idVal, const char* n1, const char* n2, const
 	return false;
 }
 
+// Нормализованное чтение архетипа игрока/НПС без магических чисел (приводит PlayerWarrior -> kArchetypeWarrior и т.д.)
+enum class NormArch { Warrior, Zealot, Scientist, Trader, Ecologist, Diplomat, Shaman, Bard, Knight, Grox, Wanderer };
+
+static NormArch GetNormalizedArchetype(cEmpire* emp) {
+	if (!emp) return NormArch::Wanderer;
+	switch (emp->mArchetype) {
+	case Archetypes::kArchetypeWarrior:
+	case Archetypes::kArchetypePlayerWarrior:   return NormArch::Warrior;
+	case Archetypes::kArchetypeZealot:
+	case Archetypes::kArchetypePlayerZealot:    return NormArch::Zealot;
+	case Archetypes::kArchetypeScientist:
+	case Archetypes::kArchetypePlayerScientist: return NormArch::Scientist;
+	case Archetypes::kArchetypeTrader:
+	case Archetypes::kArchetypePlayerTrader:    return NormArch::Trader;
+	case Archetypes::kArchetypeEcologist:
+	case Archetypes::kArchetypePlayerEcologist: return NormArch::Ecologist;
+	case Archetypes::kArchetypeDiplomat:
+	case Archetypes::kArchetypePlayerDiplomat:  return NormArch::Diplomat;
+	case Archetypes::kArchetypeShaman:
+	case Archetypes::kArchetypePlayerShaman:    return NormArch::Shaman;
+	case Archetypes::kArchetypeBard:
+	case Archetypes::kArchetypePlayerBard:      return NormArch::Bard;
+	case Archetypes::kArchetypePlayerKnight:    return NormArch::Knight;
+	case Archetypes::kArchetypeGrob:            return NormArch::Grox;
+	default:                                    return NormArch::Wanderer;
+	}
+}
+
+static float GetEngineRedSpiceReferencePrice() {
+	float refPrice = 300.0f;
+	PropertyListPtr redProp;
+	if (PropManager.GetPropertyList(0x0289B83D, 0x034D97FA, redProp) && redProp != nullptr) {
+		App::Property::GetFloat(redProp.get(), 0x00B2CCCB, refPrice);
+	}
+	return max(refPrice, 1.0f);
+}
+
 PlanetaryGadgetState cPlayerDefensiveShipsManager::GetPlanetGadgetState(cPlanetRecord* planet) {
 	PlanetaryGadgetState state;
 	if (!planet || configGadgetMultiplier <= 0.01f) return state;
 
-	// На орбите сканируем реальные размещенные объекты планеты и их здоровье (cCombatant + cGameData)
+	// Единый O(N) проход по cSpatialObject (включает все живые cCombatant и мирные постройки без дублирования!)
 	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
-		const auto& combatants = GetDataByCast<cCombatant>();
-		for (const auto& comb : combatants) {
-			if (!comb || comb->mHealthPoints <= 0.0f) continue;
-
-			cSpatialObject* spatial = object_cast<cSpatialObject>(comb.get());
-			if (!spatial) continue;
-
-			uint32_t modelId = spatial->GetModelKey().instanceID;
-			if (MatchGadgetKey(modelId, "loyaltybooster", "b_loyaltybooster", "pl_loyalty_booster", 0x04668B8A, 0x03F3E4A1)) {
-				state.hasLoyaltyBooster = true;
-			} else if (MatchGadgetKey(modelId, "happinessbooster", "b_happinessbooster", "pl_happiness_booster", 0x04668B89, 0x03F3E4A0)) {
-				state.hasHappinessBooster = true;
-			} else if (MatchGadgetKey(modelId, "uberturret", "b_uberturret", "super_turret", 0x0246F65C, 0x04668B8B)) {
-				state.hasUberTurret = true;
-			} else if (MatchGadgetKey(modelId, "spicestorage", "b_spicestorage", "pl_spice_storage", 0x04668B8C, 0x03F3E4A2)) {
-				state.hasSpiceStorage = true;
-			} else if (MatchGadgetKey(modelId, "bioprotector", "biostabilizer", "b_bioprotector", 0x04668B87, 0x04668B88)) {
-				state.hasBioProtector = true;
-			}
-		}
-
-		// Также проверяем мирные планетарные гаджеты через cSpatialObject (если у них нет ХП cCombatant)
 		const auto& spatials = GetDataByCast<cSpatialObject>();
 		for (const auto& sp : spatials) {
 			if (!sp) continue;
@@ -244,15 +259,14 @@ float cPlayerDefensiveShipsManager::GetSpiceBasePrice(cPlanetRecord* planet) {
 		}
 	}
 
-	if (spiceID == 0x0289B841 || spiceID == 0x0289B842) return 3000.0f; // Фиолетовая, Розовая
-	if (spiceID == 0x0289B83F || spiceID == 0x0289B840) return 1200.0f; // Синяя, Зеленая
-	return 300.0f; // Желтая, Красная
+	return GetEngineRedSpiceReferencePrice();
 }
 
 int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 	if (!empire) return 200000;
 
 	int starCount = static_cast<int>(empire->mStars.size());
+	float refRedPrice = GetEngineRedSpiceReferencePrice();
 	float spiceOutputWeight = 0.0f;
 	int storageCount = 0;
 
@@ -261,14 +275,14 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 		for (const auto& pl : star->GetPlanetRecords()) {
 			if (!pl || pl->GetTechLevel() != TechLevel::Empire) continue;
 
-			float pSpice = max(GetSpiceBasePrice(pl.get()), 300.0f);
+			float spiceRatio = max(GetSpiceBasePrice(pl.get()) / refRedPrice, 1.0f);
 			float tFactor = 0.4f;
 			if (pl->mbHomeWorld) tFactor = 3.0f;
 			else if (pl->mType == PlanetType::T3) tFactor = 2.0f;
 			else if (pl->mType == PlanetType::T2) tFactor = 1.2f;
 			else if (pl->mType == PlanetType::T1) tFactor = 0.7f;
 
-			spiceOutputWeight += (pSpice / 300.0f) * tFactor * 12000.0f;
+			spiceOutputWeight += spiceRatio * tFactor * 12000.0f;
 
 			if (GetPlanetGadgetState(pl.get()).hasSpiceStorage) {
 				storageCount++;
@@ -276,8 +290,8 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 		}
 	}
 
-	int arch = empire->mArchetype;
-	float bankMult = (arch == 5 || arch == 15) ? 1.75f : 1.0f;
+	NormArch arch = GetNormalizedArchetype(empire);
+	float bankMult = (arch == NormArch::Trader) ? 1.75f : 1.0f;
 	float storageBonus = static_cast<float>(storageCount) * 40000.0f * configGadgetMultiplier;
 
 	int dynamicCap = static_cast<int>(round((80000.0f + starCount * 30000.0f + storageBonus + spiceOutputWeight) * bankMult));
@@ -288,10 +302,7 @@ int cPlayerDefensiveShipsManager::CalculateShipBuildCost(cEmpire* empire) {
 	if (!empire) return 1000;
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
-	int baseCost = 1000;
-	if (empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
-		baseCost = 2000;
-	}
+	int baseCost = (empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) ? 2000 : 1000;
 
 	int systems = static_cast<int>(empire->mStars.size());
 	float inflationMultiplier = 1.0f + (systems / 10) * 0.10f;
@@ -302,27 +313,27 @@ int cPlayerDefensiveShipsManager::CalculateShipBuildCost(cEmpire* empire) {
 int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
 	if (!empire || configUpkeepMultiplier <= 0.01f) return 0;
 
-	int arch = empire->mArchetype;
-	// Фанатики и Гроксы служат за веру / коллективный разум бесплатно
-	if (arch == 2 || arch == 12 || arch == 10) {
+	NormArch arch = GetNormalizedArchetype(empire);
+	if (arch == NormArch::Zealot || arch == NormArch::Grox) {
 		return 0;
 	}
 
 	float archUpkeepMult = 1.0f;
-	if (arch == 5 || arch == 15) {
-		archUpkeepMult = 1.30f; // Торговцы платят наемникам повышенный контракт
-	} else if (arch == 1 || arch == 11 || arch == 13) {
-		archUpkeepMult = 0.80f; // Воины и Рыцари: регулярная воинская повинность дешевле
-	} else if (arch == 6 || arch == 16 || arch == 8 || arch == 18 || arch == 7 || arch == 17 || arch == 9 || arch == 19) {
-		archUpkeepMult = 0.85f; // Мирные философии: скромные аппетиты патрулей
+	if (arch == NormArch::Trader) {
+		archUpkeepMult = 1.30f;
+	} else if (arch == NormArch::Warrior || arch == NormArch::Knight) {
+		archUpkeepMult = 0.80f;
+	} else if (arch == NormArch::Ecologist || arch == NormArch::Shaman || arch == NormArch::Diplomat || arch == NormArch::Bard) {
+		archUpkeepMult = 0.85f;
 	}
 
+	float refRedPrice = GetEngineRedSpiceReferencePrice();
 	float totalNetUpkeep = 0.0f;
+
 	for (const auto& star : empire->mStars) {
 		if (!star) continue;
 		for (const auto& pl : star->GetPlanetRecords()) {
-			if (!pl || pl->GetTechLevel() != TechLevel::Empire) continue;
-			if (pl->mbHomeWorld) continue; // Столица полностью самоокупается налогами метрополии
+			if (!pl || pl->GetTechLevel() != TechLevel::Empire || pl->mbHomeWorld) continue;
 
 			int garrisonSize = GetMaxDefenders(pl.get());
 			float rawPlanetUpkeep = static_cast<float>(garrisonSize) * 45.0f;
@@ -332,16 +343,9 @@ int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
 				rawPlanetUpkeep *= (1.0f - discount);
 			}
 
-			// Самоокупаемость за счет ценности местной пряности
-			float spicePrice = GetSpiceBasePrice(pl.get());
-			float spiceOffsetRatio = 0.25f; // Дешевая красная/желтая покрывает лишь 25% расходов охраны
-			if (spicePrice > 3500.0f) {
-				spiceOffsetRatio = 1.00f; // Экзотическая пряность полностью окупает гарнизон
-			} else if (spicePrice >= 2000.0f) {
-				spiceOffsetRatio = 0.85f; // Розовая/фиолетовая гасит 85% расходов
-			} else if (spicePrice >= 600.0f) {
-				spiceOffsetRatio = 0.55f; // Синяя/зеленая гасит 55% расходов
-			}
+			// Логарифмическая самоокупаемость пряности относительно эталонной красной из .prop (0% хардкода цен!)
+			float spiceRatio = max(GetSpiceBasePrice(pl.get()) / refRedPrice, 0.5f);
+			float spiceOffsetRatio = min(0.25f + std::log2(max(spiceRatio, 1.0f)) * 0.22f, 1.00f);
 
 			float netPlanetUpkeep = rawPlanetUpkeep * (1.0f - spiceOffsetRatio);
 			if (netPlanetUpkeep > 0.0f) {
@@ -368,7 +372,9 @@ float cPlayerDefensiveShipsManager::GetPlanetaryCityUnrestFactor(cPlanetRecord* 
 		return 0.0f;
 	}
 
+	NormArch arch = GetNormalizedArchetype(GetPlayerEmpire());
 	float rawUnrest = -1.0f;
+
 	if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
 		int totalCities = 0;
 		int totalUnhappy = 0;
@@ -399,7 +405,8 @@ float cPlayerDefensiveShipsManager::GetPlanetaryCityUnrestFactor(cPlanetRecord* 
 
 			int excessFactories = totalFactories - (totalEntertainment * 2) - totalCities;
 			if (excessFactories > 0) {
-				unrest += min(static_cast<float>(excessFactories) * 0.08f, 0.50f);
+				float factorySens = (arch == NormArch::Ecologist) ? 1.5f : ((arch == NormArch::Scientist) ? 1.3f : 1.0f);
+				unrest += min(static_cast<float>(excessFactories) * 0.08f * factorySens, 0.65f);
 			}
 		}
 
@@ -413,16 +420,13 @@ float cPlayerDefensiveShipsManager::GetPlanetaryCityUnrestFactor(cPlanetRecord* 
 	}
 
 	if (gadgets.hasBioProtector && rawUnrest > 0.0f) {
-		cEmpire* emp = GetPlayerEmpire();
-		int arch = emp ? emp->mArchetype : 0;
-		if (arch == 4 || arch == 6 || arch == 8 || arch == 14 || arch == 16 || arch == 18) {
-			float bioRelief = min(0.30f * configGadgetMultiplier, 0.80f);
-			rawUnrest *= (1.0f - bioRelief);
-		}
+		float bioRelief = min(0.30f * configGadgetMultiplier, 0.80f);
+		rawUnrest *= (1.0f - bioRelief);
 	}
 
 	return rawUnrest;
 }
+
 
 bool cPlayerDefensiveShipsManager::IsPlanetUnderAttack(cPlanetRecord* planet) {
 	if (!planet) return false;
@@ -455,21 +459,28 @@ bool cPlayerDefensiveShipsManager::IsPlanetUnderAttack(cPlanetRecord* planet) {
 	return false;
 }
 
+static int ReadRebellionCooldownMs(float scaleFactor) {
+	float baseSec = 180.0f;
+	PropertyListPtr rebProp;
+	if (PropManager.GetPropertyList(id(u"RebellionConfig"), 0x02ae0c7e, rebProp) && rebProp != nullptr) {
+		App::Property::GetFloat(rebProp.get(), 0x07A1BC10, baseSec);
+	}
+	baseSec = max(baseSec, 30.0f);
+	return static_cast<int>(round(baseSec * 1000.0f * scaleFactor));
+}
+
 bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet, cEmpire* empire, bool peacetimeCheck) {
 	if (!planet || !empire || configRebellionMultiplier <= 0.01f) {
 		return false;
 	}
 
-	// 1. Фанатики и Гроксы: 0% риск бунта везде
-	int arch = empire->mArchetype;
-	if (arch == 2 || arch == 12 || arch == 10) {
+	NormArch arch = GetNormalizedArchetype(empire);
+	if (arch == NormArch::Zealot || arch == NormArch::Grox) {
 		return false;
 	}
 
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
 
-
-	// 2. Триггеры кризиса: пустая казна, задолженность по жалованию, забастовка городов или потери в бою
 	int maxTreasury = GetDynamicMaxTreasury(empire);
 	int crisisThreshold = max(static_cast<int>(maxTreasury * 0.15f), 15000);
 	bool isBankrupt = (empire->mEmpireMoney < crisisThreshold) || (unpaidUpkeepCycles > 0);
@@ -482,12 +493,10 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 	bool heavyLosses = !peacetimeCheck && ((maxDef <= 2) ? (currentDef < maxDef) : (currentDef < (maxDef / 2)));
 
 	if (peacetimeCheck) {
-		// В мирное время восстание начинается только от долгов по содержанию/глубокого дефолта ИЛИ реальной забастовки городов
 		bool severeDebt = (unpaidUpkeepCycles > 0) || (configUpkeepMultiplier > 0.01f && empire->mEmpireMoney < (crisisThreshold / 2));
 		if (!severeDebt && !hasCityRiots) {
 			return false;
 		}
-		// Столица не поднимает мирный мятеж без тяжелой стачки жителей
 		if (planet->mbHomeWorld && cityUnrest < 0.60f) {
 			return false;
 		}
@@ -497,21 +506,20 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 		}
 	}
 
-	// 3. Базовый шанс по философии
 	float rebellionChance = 0.25f;
-	if (arch == 1 || arch == 11 || arch == 13) {
-		rebellionChance = 0.50f; // Воины / Рыцари
-	} else if (arch == 5 || arch == 15) {
-		rebellionChance = 0.40f; // Торговцы
-	} else if (arch == 4 || arch == 6 || arch == 14 || arch == 16) {
-		rebellionChance = 0.15f; // Ученые и Экологи
+	if (arch == NormArch::Warrior || arch == NormArch::Knight) {
+		rebellionChance = 0.50f;
+	} else if (arch == NormArch::Trader) {
+		rebellionChance = 0.40f;
+	} else if (arch == NormArch::Scientist || arch == NormArch::Ecologist) {
+		rebellionChance = (cityUnrest >= 0.45f) ? 0.42f : 0.15f;
+	} else if (arch == NormArch::Diplomat || arch == NormArch::Bard || arch == NormArch::Shaman) {
+		rebellionChance = 0.20f;
 	}
 
 	if (peacetimeCheck) {
-		rebellionChance *= 0.65f; // Базовый мирный порог мягче боевого штурма, но разгоняется стачками и долгами
+		rebellionChance *= 0.65f;
 	}
-
-	// Бонус от забастовок заводов и долгов по содержанию гарнизона
 	if (cityUnrest > 0.0f) {
 		rebellionChance += cityUnrest * 0.35f;
 	}
@@ -519,51 +527,27 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 		rebellionChance += min(static_cast<float>(unpaidUpkeepCycles) * 0.12f, 0.45f);
 	}
 
-	// 4. Модификатор Т-индекса и столицы
 	float planetTierFactor = 1.0f;
-	if (planet->mbHomeWorld) {
-		planetTierFactor = 0.20f;
-	} else if (planet->mType == PlanetType::T0) {
-		planetTierFactor = 1.55f;
-	} else if (planet->mType == PlanetType::T1) {
-		planetTierFactor = 1.25f;
-	} else if (planet->mType == PlanetType::T2) {
-		planetTierFactor = 0.95f;
-	} else if (planet->mType == PlanetType::T3) {
-		planetTierFactor = 0.60f;
-	}
+	if (planet->mbHomeWorld) planetTierFactor = 0.20f;
+	else if (planet->mType == PlanetType::T0) planetTierFactor = 1.55f;
+	else if (planet->mType == PlanetType::T1) planetTierFactor = 1.25f;
+	else if (planet->mType == PlanetType::T2) planetTierFactor = 0.95f;
+	else if (planet->mType == PlanetType::T3) planetTierFactor = 0.60f;
 
-	// 5. Модификатор ценности местной пряности
-	float spicePrice = GetSpiceBasePrice(planet);
+	float refRedPrice = GetEngineRedSpiceReferencePrice();
+	float spiceRatio = max(GetSpiceBasePrice(planet) / refRedPrice, 0.5f);
 	float spiceStabilityFactor = 1.0f;
-	if (spicePrice > 3500.0f) {
-		spiceStabilityFactor = 0.65f;
-	} else if (spicePrice >= 2000.0f) {
-		spiceStabilityFactor = 0.75f;
-	} else if (spicePrice >= 600.0f) {
-		spiceStabilityFactor = 0.90f;
-	} else {
-		spiceStabilityFactor = 1.15f;
-	}
+	if (spiceRatio >= 5.0f) spiceStabilityFactor = 0.65f;
+	else if (spiceRatio >= 2.5f) spiceStabilityFactor = 0.75f;
+	else if (spiceRatio >= 1.5f) spiceStabilityFactor = 0.90f;
+	else spiceStabilityFactor = 1.15f;
 
-	// 6. Полицейский контроль ратушей и турелей (Unlimited-Colony)
 	int cityCount = GetColonyCount(planet);
 	int turretCount = GetTurretCount(planet);
-	float garrisonControlFactor = 1.0f;
-	if (cityCount <= 1) {
-		garrisonControlFactor = 1.15f;
-	} else if (cityCount > 2) {
-		garrisonControlFactor = max(1.0f - static_cast<float>(cityCount - 2) * 0.08f, 0.50f);
-	}
-	if (turretCount >= 12) {
-		garrisonControlFactor *= 0.85f;
-	}
-	if (gadgets.hasUberTurret) {
-		garrisonControlFactor *= 0.80f;
-	}
+	float garrisonControlFactor = (cityCount <= 1) ? 1.15f : max(1.0f - static_cast<float>(cityCount - 2) * 0.08f, 0.50f);
+	if (turretCount >= 12) garrisonControlFactor *= 0.85f;
+	if (gadgets.hasUberTurret) garrisonControlFactor *= 0.80f;
 
-
-	// 7. Дистанция от столицы по философии
 	float distanceFactor = 1.0f;
 	cStarRecord* homeStar = empire->GetHomeStarRecord();
 	cStarRecord* targetStar = planet->GetStarRecord();
@@ -571,18 +555,21 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 		Math::Vector3 diff = homeStar->mPosition - targetStar->mPosition;
 		float dist = std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
 
-		if (arch == 1 || arch == 11 || arch == 13 || arch == 5 || arch == 15) {
-			if (dist > 12.0f) {
-				distanceFactor = min(1.0f + (dist - 12.0f) * 0.025f, 1.60f); // Воины и Торговцы: сепаратизм окраин
+		if (arch == NormArch::Shaman) {
+			bool homeLost = (homeStar->mEmpireID != empire->GetEmpireID());
+			distanceFactor = homeLost ? 1.50f : 0.55f;
+		} else if (arch == NormArch::Ecologist) {
+			if (planet->mType == PlanetType::T0) {
+				if (dist > 12.0f) distanceFactor = min(1.0f + (dist - 12.0f) * 0.025f, 1.35f);
+			} else {
+				distanceFactor = max(0.62f, std::exp(-0.012f * max(dist - 6.0f, 0.0f)));
 			}
-		} else if (arch == 6 || arch == 16 || arch == 7 || arch == 17 || arch == 8 || arch == 18 || arch == 9 || arch == 19) {
-			if (dist > 12.0f) {
-				distanceFactor = max(1.0f - (dist - 12.0f) * 0.015f, 0.65f); // Дружелюбные: гармония и самоуправление вдали от центра
-			}
-		} else if (arch == 4 || arch == 14) {
-			if (dist > 25.0f) {
-				distanceFactor = min(1.0f + (dist - 25.0f) * 0.01f, 1.20f); // Ученые: гиперсвязь до 25 пк, дальше техно-прагматизм
-			}
+		} else if (arch == NormArch::Warrior || arch == NormArch::Knight || arch == NormArch::Trader) {
+			if (dist > 12.0f) distanceFactor = min(1.0f + (dist - 12.0f) * 0.025f, 1.60f);
+		} else if (arch == NormArch::Diplomat || arch == NormArch::Bard) {
+			if (dist > 10.0f) distanceFactor = max(1.0f - (dist - 10.0f) * 0.015f, 0.65f);
+		} else if (arch == NormArch::Scientist) {
+			if (dist > 25.0f) distanceFactor = min(1.0f + (dist - 25.0f) * 0.012f, 1.25f);
 		}
 	}
 
@@ -596,25 +583,22 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 	return (Math::randf() < finalChance);
 }
 
-
 void cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* planet, cEmpire* empire) {
 	if (!planet || !empire || configRebellionMultiplier <= 0.01f) return;
 	if (GetCurrentContext() != SpaceContext::Planet || planet != GetActivePlanetRecord()) return;
+	if (!planet->GetStarRecord() || planet->GetStarRecord()->mEmpireID != GetPlayerEmpireID()) return;
 	if (GetPlanetGadgetState(planet).hasLoyaltyBooster) return;
 
-	// Проверка кулдауна (не чаще раза в 4 минуты на одной и той же колонии)
 	auto itCd = planetRebelCooldowns.find(planet);
 	if (itCd != planetRebelCooldowns.end() && elapsedTime < itCd->second) {
 		return;
 	}
 
 	if (!ShouldTriggerRebellion(planet, empire, true)) {
-		// Ставим небольшой откат проверки на 45 секунд, чтобы не кидать кубик каждый кадр
-		planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 45000;
+		planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + ReadRebellionCooldownMs(0.25f);
 		return;
 	}
 
-	// Собираем живых лояльных защитников патруля на орбите
 	eastl::vector<cGameDataUFO*> loyalPatrol;
 	const auto& ufos = GetData<cGameDataUFO>();
 	for (const auto& ufo : ufos) {
@@ -627,7 +611,6 @@ void cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* pla
 
 	if (loyalPatrol.empty()) return;
 
-	// От 30% до 50% текущего патруля поднимает сепаратистский мятеж и атакует ратуши
 	int rebelCount = max(static_cast<int>(round(static_cast<float>(loyalPatrol.size()) * 0.40f)), 1);
 	rebelCount = eastl::min<int>(rebelCount, static_cast<int>(loyalPatrol.size()));
 
@@ -638,7 +621,6 @@ void cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* pla
 		DecreaseDefendersOnPlanet(planet);
 	}
 
-	// Если из-за сильной стачки или долгов бунт масштабный — часть ангарного резерва тоже вылетает путчистами
 	if (reserveToMobilize > 0 && GetPlanetaryCityUnrestFactor(planet) >= 0.50f) {
 		cGameDataUFO* extraRebel = SpawnDefensiveShip(planet, empire, false);
 		if (extraRebel) {
@@ -649,15 +631,14 @@ void cPlayerDefensiveShipsManager::TryTriggerColonialUprising(cPlanetRecord* pla
 		}
 	}
 
-	// Кулдаун 4 минуты после начала гражданской войны на этой колонии
-	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 240000;
+	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + ReadRebellionCooldownMs(1.30f);
 }
 
 void cPlayerDefensiveShipsManager::TriggerBoosterDestroyedBacklash(cPlanetRecord* planet, cEmpire* empire) {
 	if (!planet || !empire || configRebellionMultiplier <= 0.01f) return;
 
-	int arch = empire->mArchetype;
-	if (arch == 2 || arch == 12 || arch == 10) return;
+	NormArch arch = GetNormalizedArchetype(empire);
+	if (arch == NormArch::Zealot || arch == NormArch::Grox) return;
 
 	eastl::vector<cGameDataUFO*> loyalDefenders;
 	const auto& ufos = GetData<cGameDataUFO>();
@@ -679,6 +660,7 @@ void cPlayerDefensiveShipsManager::TriggerBoosterDestroyedBacklash(cPlanetRecord
 
 int cPlayerDefensiveShipsManager::PacifyRebelsOnActivePlanet(cPlanetRecord* planet, cEmpire* empire, float pacifyRatio) {
 	if (!planet || !empire || pacifyRatio <= 0.0f) return 0;
+	if (!planet->GetStarRecord() || planet->GetStarRecord()->mEmpireID != GetPlayerEmpireID()) return 0;
 
 	eastl::vector<cGameDataUFO*> activeRebels;
 	const auto& ufos = GetData<cGameDataUFO>();
@@ -709,9 +691,10 @@ int cPlayerDefensiveShipsManager::PacifyRebelsOnActivePlanet(cPlanetRecord* plan
 		}
 	}
 
-	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + 180000;
+	planetRebelCooldowns[cPlanetRecordPtr(planet)] = elapsedTime + ReadRebellionCooldownMs(1.0f);
 	return pacified;
 }
+
 
 void cPlayerDefensiveShipsManager::OnPlayerToolUsed(cSpaceToolData* toolData) {
 	if (!toolData || !IsSpaceGame() || configGadgetMultiplier <= 0.01f) return;
@@ -738,10 +721,11 @@ void cPlayerDefensiveShipsManager::OnPlayerToolUsed(cSpaceToolData* toolData) {
 }
 
 void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
-	if (!IsSpaceGame()) return;
+	if (!IsSpaceGame() || deltaGameTime <= 0 || deltaTime <= 0) return;
 
-	elapsedTime += deltaGameTime;
+	elapsedTime += eastl::min<int>(deltaTime, 100);
 	if (elapsedTime < lastUpkeepTime) lastUpkeepTime = 0;
+
 
 	cEmpire* playerEmpire = GetPlayerEmpire();
 
@@ -912,7 +896,6 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	if (!empire) empire = GetPlayerEmpire();
 	if (!empire) return 350.0f;
 
-	// 1. Читаем системный массив healthDefender (0x05D67A28) напрямую из установленного боевого модуля .prop (0% хардкода!)
 	eastl::vector<float> propDefenderHP;
 	PropertyListPtr sdoConfigKeys;
 	if (PropManager.GetPropertyList(id("ConfigurationKeys"), id("SdoConfig"), sdoConfigKeys) && sdoConfigKeys != nullptr) {
@@ -938,51 +921,41 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 		tableBaseHP = propDefenderHP[idx];
 	}
 
-	// 2. Плавный промышленный рост от масштаба империи (в процентах от базовой таблицы, а не +400 плоских ХП на старте!)
 	int totalStars = static_cast<int>(empire->mStars.size());
 	float empireScaleMult = 1.0f + min(static_cast<float>(totalStars) * 0.012f, 0.35f);
 
-	// 3. Философия игрока (единая с cSpaceCombatMetrics второго мода)
 	float levelFactor = static_cast<float>(lvl + 1) / 5.0f;
-	int arch = empire->mArchetype;
+	NormArch arch = GetNormalizedArchetype(empire);
 	float archetypeMultiplier = 1.0f;
-	if (arch == 1 || arch == 11 || arch == 13 || arch == 10) {
-		archetypeMultiplier = 1.0f + (0.30f * levelFactor); // Воины, Рыцари
-	} else if (arch == 2 || arch == 12 || arch == 4 || arch == 14) {
-		archetypeMultiplier = 1.0f + (0.10f * levelFactor); // Фанатики, Ученые
-	} else if (arch == 3 || arch == 7 || arch == 9 || arch == 17 || arch == 19) {
-		archetypeMultiplier = 1.0f - (0.15f * (1.0f - levelFactor * 0.5f)); // Барды, Дипломаты
+	if (arch == NormArch::Warrior || arch == NormArch::Knight || arch == NormArch::Grox) {
+		archetypeMultiplier = 1.0f + (0.30f * levelFactor);
+	} else if (arch == NormArch::Zealot || arch == NormArch::Scientist) {
+		archetypeMultiplier = 1.0f + (0.10f * levelFactor);
+	} else if (arch == NormArch::Bard || arch == NormArch::Diplomat) {
+		archetypeMultiplier = 1.0f - (0.15f * (1.0f - levelFactor * 0.5f));
 	}
 
 	float totalHP = tableBaseHP * empireScaleMult * archetypeMultiplier;
 	if (!planet) return totalHP;
 
-	// 4. Влияние Т-индекса колонии (стимул озеленять сырые аванпосты T0/T1 до метрополий T3!)
-	float tierArmorMult = 0.80f; // T0 аванпост
+	float tierArmorMult = 0.80f;
 	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) tierArmorMult = 1.15f;
 	else if (planet->mType == PlanetType::T2) tierArmorMult = 1.00f;
 	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.90f;
 	totalHP *= tierArmorMult;
 
-	// 5. Логарифмический бонус от реальной цены пряности из .prop (вместо зашитых +300 ХП!)
-	float refRedPrice = 300.0f;
-	PropertyListPtr redProp;
-	if (PropManager.GetPropertyList(0x0289B83D, 0x034D97FA, redProp) && redProp != nullptr) {
-		App::Property::GetFloat(redProp.get(), 0x00B2CCCB, refRedPrice);
-	}
-	float spiceRatio = max(GetSpiceBasePrice(planet) / max(refRedPrice, 1.0f), 1.0f);
+	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 1.0f);
 	float spiceMult = 1.0f + min(std::log2(spiceRatio) * 0.06f, 0.25f);
 	totalHP *= spiceMult;
 
-	// 6. Стационарные гаджеты и состояние казны
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
 	if (gadgets.hasUberTurret) {
-		float uberBonus = (arch == 4 || arch == 14) ? 0.40f : 0.25f;
+		float uberBonus = (arch == NormArch::Scientist) ? 0.40f : 0.25f;
 		totalHP *= (1.0f + uberBonus * configGadgetMultiplier);
 	}
 	if (gadgets.hasBioProtector) {
-		if (arch == 6 || arch == 16) totalHP *= (1.0f + 0.30f * configGadgetMultiplier);
-		else if (arch == 8 || arch == 18) totalHP *= (1.0f + 0.15f * configGadgetMultiplier);
+		if (arch == NormArch::Ecologist) totalHP *= (1.0f + 0.30f * configGadgetMultiplier);
+		else if (arch == NormArch::Shaman) totalHP *= (1.0f + 0.15f * configGadgetMultiplier);
 	}
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
@@ -994,6 +967,7 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 
 	return max(totalHP, 100.0f);
 }
+
 
 cGameDataUFO* cPlayerDefensiveShipsManager::SpawnDefensiveShip(cPlanetRecord* planet, cEmpire* empire, bool canRebel) {
 	if (!empire) return nullptr;
@@ -1166,17 +1140,8 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 	float speedMultiplier = 1.0f / (1.0f + (colonyCount - 1) * 0.05f);
 	if (speedMultiplier < 0.5f) speedMultiplier = 0.5f;
 
-	float spiceSpeedFactor = 1.0f;
-	float spicePrice = GetSpiceBasePrice(planet);
-	if (spicePrice > 3500.0f) {
-		spiceSpeedFactor = 0.55f;
-	} else if (spicePrice >= 2000.0f) {
-		spiceSpeedFactor = 0.70f;
-	} else if (spicePrice >= 600.0f) {
-		spiceSpeedFactor = 0.85f;
-	} else if (spicePrice > 0.0f) {
-		spiceSpeedFactor = 0.95f;
-	}
+	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 0.5f);
+	float spiceSpeedFactor = max(0.55f, 0.95f - std::log2(max(spiceRatio, 1.0f)) * 0.10f);
 
 	cEmpire* empire = nullptr;
 	if (planet->GetStarRecord() && planet->GetStarRecord()->mEmpireID != 0) {
