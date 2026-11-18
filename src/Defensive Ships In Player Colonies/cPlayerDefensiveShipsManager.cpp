@@ -238,6 +238,17 @@ int cPlayerDefensiveShipsManager::GetDynamicSoftCap(cEmpire* empire) {
 
 	int totalSystems = static_cast<int>(empire->mStars.size());
 	int weaponryRank = max(empire->GetWeaponryLevel(), 1);
+
+	if (empire == GetPlayerEmpire()) {
+		float starTier = min(std::sqrt(max(static_cast<float>(totalSystems - 1), 0.0f)) * 0.82f, 4.0f) + 1.0f;
+		float ufoTier = 1.0f;
+		cGameDataUFO* playerUfo = Simulator::GetPlayerUFO();
+		if (playerUfo != nullptr && playerUfo->mMaxHealthPoints > 300.0f) {
+			ufoTier = min(playerUfo->mMaxHealthPoints / 450.0f, 5.0f);
+		}
+		weaponryRank = static_cast<int>(round(max(starTier, ufoTier)));
+	}
+
 	int dynamicCap = 20 + static_cast<int>(totalSystems * 0.8f) + (weaponryRank * 3);
 
 	dynamicCap = static_cast<int>(round(static_cast<float>(dynamicCap) * configFleetMultiplier));
@@ -246,6 +257,7 @@ int cPlayerDefensiveShipsManager::GetDynamicSoftCap(cEmpire* empire) {
 
 	return dynamicCap;
 }
+
 
 float cPlayerDefensiveShipsManager::GetSpiceBasePrice(cPlanetRecord* planet) {
 	if (!planet) return 0.0f;
@@ -269,7 +281,7 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 
 	int starCount = static_cast<int>(empire->mStars.size());
 	float refRedPrice = GetEngineRedSpiceReferencePrice();
-	float spiceOutputWeight = 0.0f;
+	float rawSpiceScore = 0.0f;
 	int storageCount = 0;
 
 	for (const auto& star : empire->mStars) {
@@ -277,14 +289,14 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 		for (const auto& pl : star->GetPlanetRecords()) {
 			if (!pl || pl->GetTechLevel() != TechLevel::Empire) continue;
 
-			float spiceRatio = max(GetSpiceBasePrice(pl.get()) / refRedPrice, 1.0f);
+			float spiceRatio = min(max(GetSpiceBasePrice(pl.get()) / refRedPrice, 1.0f), 12.0f);
 			float tFactor = 0.4f;
 			if (pl->mbHomeWorld) tFactor = 3.0f;
 			else if (pl->mType == PlanetType::T3) tFactor = 2.0f;
 			else if (pl->mType == PlanetType::T2) tFactor = 1.2f;
 			else if (pl->mType == PlanetType::T1) tFactor = 0.7f;
 
-			spiceOutputWeight += spiceRatio * tFactor * 12000.0f;
+			rawSpiceScore += spiceRatio * tFactor;
 
 			if (GetPlanetGadgetState(pl.get()).hasSpiceStorage) {
 				storageCount++;
@@ -292,24 +304,33 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 		}
 	}
 
-	NormArch arch = GetNormalizedArchetype(empire);
-	float bankMult = (arch == NormArch::Trader) ? 1.75f : 1.0f;
-	float storageBonus = static_cast<float>(storageCount) * 40000.0f * configGadgetMultiplier;
+	float spiceOutputWeight = std::sqrt(max(rawSpiceScore, 0.0f)) * 95000.0f;
+	float starWeight = std::sqrt(static_cast<float>(max(starCount, 1))) * 140000.0f;
 
-	int dynamicCap = static_cast<int>(round((80000.0f + starCount * 30000.0f + storageBonus + spiceOutputWeight) * bankMult));
-	return max(dynamicCap, 100000);
+	NormArch arch = GetNormalizedArchetype(empire);
+	float bankMult = (arch == NormArch::Trader) ? 1.35f : 1.0f;
+	float storageHull = static_cast<float>(storageCount) / (static_cast<float>(storageCount) + 8.0f);
+	float storageBonus = storageHull * 600000.0f * configGadgetMultiplier;
+
+	int dynamicCap = static_cast<int>(round((120000.0f + starWeight + storageBonus + spiceOutputWeight) * bankMult));
+	return min(max(dynamicCap, 150000), 5000000);
 }
 
 int cPlayerDefensiveShipsManager::CalculateShipBuildCost(cEmpire* empire) {
 	if (!empire) return 1000;
 
-	int maxTreasury = GetDynamicMaxTreasury(empire);
-	int baseCost = (empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) ? 2000 : 1000;
+	int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
+	float fillRatio = static_cast<float>(max(empire->mEmpireMoney, 0)) / static_cast<float>(maxTreasury);
 
-	int systems = static_cast<int>(empire->mStars.size());
-	float inflationMultiplier = 1.0f + (systems / 10) * 0.10f;
+	// Гладкая S-кривая бюджета ВПК: от 850 § при дефиците до ~2000 § при полном профиците
+	float budgetSigmoid = 0.5f * (std::tanh((fillRatio - 0.65f) * 3.5f) + 1.0f);
+	float smoothBaseCost = 850.0f + 1150.0f * budgetSigmoid;
 
-	return static_cast<int>(round(static_cast<float>(baseCost) * inflationMultiplier));
+	// Гладкая степенная кривая административной инфляции (растёт с каждой новой звездой без ступенек)
+	float systems = static_cast<float>(max(static_cast<int>(empire->mStars.size()) - 1, 0));
+	float inflationMultiplier = 1.0f + min(std::pow(systems, 0.75f) * 0.032f, 1.25f);
+
+	return static_cast<int>(round(smoothBaseCost * inflationMultiplier));
 }
 
 int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
@@ -356,8 +377,8 @@ int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
 		}
 	}
 
-	int systems = static_cast<int>(empire->mStars.size());
-	float scaleFactor = 1.0f + (systems / 15) * 0.10f;
+	float systems = static_cast<float>(max(static_cast<int>(empire->mStars.size()) - 1, 0));
+	float scaleFactor = 1.0f + min(std::pow(systems, 0.75f) * 0.022f, 1.00f);
 
 	int finalUpkeep = static_cast<int>(round(totalNetUpkeep * archUpkeepMult * scaleFactor * configUpkeepMultiplier));
 	return max(finalUpkeep, 0);
@@ -484,8 +505,8 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
 
 	int maxTreasury = GetDynamicMaxTreasury(empire);
-	int crisisThreshold = max(static_cast<int>(maxTreasury * 0.15f), 15000);
-	bool isBankrupt = (empire->mEmpireMoney < crisisThreshold) || (unpaidUpkeepCycles > 0);
+	int crisisThreshold = min(max(static_cast<int>(maxTreasury * 0.05f), 15000), 75000);
+	bool isBankrupt = (empire == GetPlayerEmpire()) && ((empire->mEmpireMoney < crisisThreshold) || (unpaidUpkeepCycles > 0));
 
 	float cityUnrest = GetPlanetaryCityUnrestFactor(planet);
 	bool hasCityRiots = (cityUnrest >= 0.25f);
@@ -959,17 +980,19 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	else if (planet->mType == PlanetType::T2) tierArmorMult = 0.98f;
 	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.88f;
 
-	int colonies = max(GetColonyCount(planet), 1);
-	int turrets = GetTurretCount(planet);
-	float colonyInfraBonus = min(static_cast<float>(colonies - 1) * 0.035f, 0.25f) +
-	                         min(static_cast<float>(turrets) * 0.005f, 0.12f);
-	totalHP *= (tierArmorMult + colonyInfraBonus);
+	// Гиперболическое насыщение инфраструктуры X / (X + K): вечная полезность застройки без хардкапа
+	float extraCities = static_cast<float>(max(GetColonyCount(planet) - 1, 0));
+	float turrets = static_cast<float>(max(GetTurretCount(planet), 0));
+	float cityHyperbola = 0.32f * (extraCities / (extraCities + 5.5f));
+	float turretHyperbola = 0.16f * (turrets / (turrets + 22.0f));
+	totalHP *= (tierArmorMult + cityHyperbola + turretHyperbola);
 
-	// 6. Ценность местной пряности (логарифмически из .prop)
+	// 6. Ценность местной пряности (гладкая гипербола логарифма без ступеньки)
 	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 1.0f);
-	totalHP *= (1.0f + min(std::log2(spiceRatio) * 0.04f, 0.16f));
+	float logSpice = std::log2(spiceRatio);
+	totalHP *= (1.0f + 0.20f * (logSpice / (logSpice + 2.5f)));
 
-	// 7. Планетарные постройки и состояние казны
+	// 7. Планетарные постройки и гладкая S-кривая финансирования казны
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
 	float gadgetBonus = 0.0f;
 	if (gadgets.hasUberTurret) {
@@ -981,11 +1004,18 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	}
 	totalHP *= (1.0f + gadgetBonus);
 
-	int maxTreasury = GetDynamicMaxTreasury(empire);
-	if (totalStars >= 3 && empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
-		totalHP *= 1.15f;
-	} else if (empire->mEmpireMoney < max(static_cast<int>(maxTreasury * 0.15f), 15000) || unpaidUpkeepCycles > 0) {
-		totalHP *= 0.75f;
+	if (empire == GetPlayerEmpire()) {
+		int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
+		float fillRatio = static_cast<float>(max(empire->mEmpireMoney, 0)) / static_cast<float>(maxTreasury);
+
+		if (unpaidUpkeepCycles > 0) {
+			float debtDecay = 1.0f / (1.0f + static_cast<float>(unpaidUpkeepCycles) * 0.18f);
+			totalHP *= max(0.65f, debtDecay);
+		} else {
+			float deficitDrop = 0.25f * std::exp(-fillRatio * 14.0f);
+			float surplusBoost = (totalStars >= 3) ? (0.16f * 0.5f * (std::tanh((fillRatio - 0.72f) * 4.0f) + 1.0f)) : 0.0f;
+			totalHP *= (1.0f - deficitDrop + surplusBoost);
+		}
 	}
 
 	return max(totalHP, 100.0f);
@@ -1157,13 +1187,12 @@ int cPlayerDefensiveShipsManager::GetSpawnBatch(cPlanetRecord* planet) {
 int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet) {
 	if (!planet) return reinforceTime;
 
-	int colonyCount = GetColonyCount(planet);
-
-	float speedMultiplier = 1.0f / (1.0f + (colonyCount - 1) * 0.05f);
-	if (speedMultiplier < 0.5f) speedMultiplier = 0.5f;
+	float extraCities = static_cast<float>(max(GetColonyCount(planet) - 1, 0));
+	float speedMultiplier = 0.50f + 0.50f / (1.0f + extraCities * 0.12f);
 
 	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 0.5f);
-	float spiceSpeedFactor = max(0.55f, 0.95f - std::log2(max(spiceRatio, 1.0f)) * 0.10f);
+	float logSpice = std::log2(max(spiceRatio, 1.0f));
+	float spiceSpeedFactor = 0.96f - 0.42f * (logSpice / (logSpice + 2.8f));
 
 	cEmpire* empire = nullptr;
 	if (planet->GetStarRecord() && planet->GetStarRecord()->mEmpireID != 0) {
@@ -1172,12 +1201,16 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 	if (!empire) empire = GetPlayerEmpire();
 
 	float treasurySpeedFactor = 1.0f;
-	if (empire) {
-		int maxTreasury = GetDynamicMaxTreasury(empire);
-		if (empire->mStars.size() >= 3 && empire->mEmpireMoney > static_cast<int>(maxTreasury * 0.80f)) {
-			treasurySpeedFactor = 0.75f;
-		} else if (empire->mEmpireMoney < max(static_cast<int>(maxTreasury * 0.15f), 15000) || unpaidUpkeepCycles > 0) {
-			treasurySpeedFactor = 2.20f;
+	if (empire && empire == GetPlayerEmpire()) {
+		int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
+		float fillRatio = static_cast<float>(max(empire->mEmpireMoney, 0)) / static_cast<float>(maxTreasury);
+
+		if (unpaidUpkeepCycles > 0) {
+			treasurySpeedFactor = 1.35f + min(static_cast<float>(unpaidUpkeepCycles) * 0.25f, 1.15f);
+		} else {
+			float crisisLag = 1.20f * std::exp(-fillRatio * 14.0f);
+			float surplusRush = (empire->mStars.size() >= 3) ? (0.25f * 0.5f * (std::tanh((fillRatio - 0.72f) * 4.0f) + 1.0f)) : 0.0f;
+			treasurySpeedFactor = 1.0f + crisisLag - surplusRush;
 		}
 	}
 
@@ -1191,7 +1224,6 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 		unrestSlowdown *= max(0.60f, 1.0f - 0.20f * configGadgetMultiplier);
 	}
 
-
 	int dynamicTime = static_cast<int>(round(static_cast<float>(reinforceTime) * speedMultiplier * spiceSpeedFactor * treasurySpeedFactor * unrestSlowdown));
 
 	auto it = planetDefenderShips.find(planet);
@@ -1199,7 +1231,7 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 		int maxDef = GetMaxDefenders(planet);
 		if (maxDef > 0) {
 			float missingRatio = 1.0f - (static_cast<float>(it->second) / static_cast<float>(maxDef));
-			if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord()) {
+			if (GetCurrentContext() == SpaceContext::Planet && planet == GetActivePlanetRecord() && IsPlanetUnderAttack(planet)) {
 				float siegePenalty = 1.0f + (missingRatio * 1.5f);
 				dynamicTime = static_cast<int>(round(static_cast<float>(dynamicTime) * siegePenalty));
 			}
@@ -1208,6 +1240,7 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 
 	return max(dynamicTime, 2000);
 }
+
 
 int cPlayerDefensiveShipsManager::GetDefendersOnPlanet(cPlanetRecord* planet) {
 	auto it = planetDefenderShips.find(planet);
