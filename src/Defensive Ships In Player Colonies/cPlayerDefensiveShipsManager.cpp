@@ -304,34 +304,40 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 		}
 	}
 
-	float spiceOutputWeight = std::sqrt(max(rawSpiceScore, 0.0f)) * 95000.0f;
-	float starWeight = std::sqrt(static_cast<float>(max(starCount, 1))) * 140000.0f;
+	// 100% Zero-Hardcode: все денежные веса кратны эталонной цене красной пряности из .prop движка
+	float spiceOutputWeight = std::sqrt(max(rawSpiceScore, 0.0f)) * (refRedPrice * 315.0f);
+	float starWeight = std::sqrt(static_cast<float>(max(starCount, 1))) * (refRedPrice * 465.0f);
+	float baseReserve = refRedPrice * 400.0f;
 
 	NormArch arch = GetNormalizedArchetype(empire);
-	float bankMult = (arch == NormArch::Trader) ? 1.35f : 1.0f;
+	float bankMult = (arch == NormArch::Trader) ? 1.55f : 1.0f;
 	float storageHull = static_cast<float>(storageCount) / (static_cast<float>(storageCount) + 8.0f);
-	float storageBonus = storageHull * 600000.0f * configGadgetMultiplier;
+	float storageBonus = storageHull * (refRedPrice * 2000.0f) * configGadgetMultiplier;
 
-	int dynamicCap = static_cast<int>(round((120000.0f + starWeight + storageBonus + spiceOutputWeight) * bankMult));
-	return min(max(dynamicCap, 150000), 5000000);
+	int minFloor = static_cast<int>(round(refRedPrice * 350.0f));
+	int dynamicCap = static_cast<int>(round((baseReserve + starWeight + storageBonus + spiceOutputWeight) * bankMult));
+	return max(dynamicCap, max(minFloor, 1));
 }
 
 int cPlayerDefensiveShipsManager::CalculateShipBuildCost(cEmpire* empire) {
-	if (!empire) return 1000;
+	float refRedPrice = GetEngineRedSpiceReferencePrice();
+	if (!empire) return max(static_cast<int>(round(refRedPrice * 3.33f)), 1);
 
 	int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
 	float fillRatio = static_cast<float>(max(empire->mEmpireMoney, 0)) / static_cast<float>(maxTreasury);
 
-	// Гладкая S-кривая бюджета ВПК: от 850 § при дефиците до ~2000 § при полном профиците
+	// Гладкая S-кривая бюджета ВПК в единицах эталонной пряности (без зашитых констант в спорлингах)
+	float unitHullPrice = refRedPrice * 3.333f;
 	float budgetSigmoid = 0.5f * (std::tanh((fillRatio - 0.65f) * 3.5f) + 1.0f);
-	float smoothBaseCost = 850.0f + 1150.0f * budgetSigmoid;
+	float smoothBaseCost = unitHullPrice * (0.85f + 1.15f * budgetSigmoid);
 
-	// Гладкая степенная кривая административной инфляции (растёт с каждой новой звездой без ступенек)
+	// Гладкая степенная кривая административной инфляции
 	float systems = static_cast<float>(max(static_cast<int>(empire->mStars.size()) - 1, 0));
 	float inflationMultiplier = 1.0f + min(std::pow(systems, 0.75f) * 0.032f, 1.25f);
 
-	return static_cast<int>(round(smoothBaseCost * inflationMultiplier));
+	return max(static_cast<int>(round(smoothBaseCost * inflationMultiplier)), 1);
 }
+
 
 int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
 	if (!empire || configUpkeepMultiplier <= 0.01f) return 0;
@@ -359,7 +365,7 @@ int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
 			if (!pl || pl->GetTechLevel() != TechLevel::Empire || pl->mbHomeWorld) continue;
 
 			int garrisonSize = GetMaxDefenders(pl.get());
-			float rawPlanetUpkeep = static_cast<float>(garrisonSize) * 45.0f;
+			float rawPlanetUpkeep = static_cast<float>(garrisonSize) * (refRedPrice * 0.15f);
 
 			if (GetPlanetGadgetState(pl.get()).hasSpiceStorage) {
 				float discount = min(0.50f * configGadgetMultiplier, 0.85f);
@@ -504,8 +510,10 @@ bool cPlayerDefensiveShipsManager::ShouldTriggerRebellion(cPlanetRecord* planet,
 
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
 
-	int maxTreasury = GetDynamicMaxTreasury(empire);
-	int crisisThreshold = min(max(static_cast<int>(maxTreasury * 0.05f), 15000), 75000);
+	int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
+	float starScale = std::sqrt(static_cast<float>(max(static_cast<int>(empire->mStars.size()), 1)));
+	float dynamicCrisisRatio = 0.15f / (1.0f + (starScale - 1.0f) * 0.28f);
+	int crisisThreshold = static_cast<int>(round(static_cast<float>(maxTreasury) * dynamicCrisisRatio));
 	bool isBankrupt = (empire == GetPlayerEmpire()) && ((empire->mEmpireMoney < crisisThreshold) || (unpaidUpkeepCycles > 0));
 
 	float cityUnrest = GetPlanetaryCityUnrestFactor(planet);
@@ -765,7 +773,7 @@ void cPlayerDefensiveShipsManager::Update(int deltaTime, int deltaGameTime) {
 				playerEmpire->mEmpireMoney = 0;
 				unpaidUpkeepCycles = eastl::min<int>(unpaidUpkeepCycles + 1, 6);
 			}
-		} else if (unpaidUpkeepCycles > 0 && playerEmpire->mEmpireMoney > 25000) {
+		} else if (unpaidUpkeepCycles > 0 && playerEmpire->mEmpireMoney > static_cast<int>(GetDynamicMaxTreasury(playerEmpire) * 0.12f)) {
 			unpaidUpkeepCycles--;
 		}
 	}
