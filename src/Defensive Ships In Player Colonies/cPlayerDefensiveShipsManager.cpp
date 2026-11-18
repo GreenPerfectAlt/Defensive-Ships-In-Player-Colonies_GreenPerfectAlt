@@ -982,11 +982,27 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	float totalHP = baseDefenderHP * archetypeMultiplier;
 	if (!planet) return max(totalHP, 100.0f);
 
-	// 5. Т-индекс + Количество колоний (Unlimited-Colony) + Турели на самой планете!
+	// 5. Т-индекс + Лорные особенности биосферы T0 / Астрального Нексуса (v1.1.4 - v1.1.4.2)
 	float tierArmorMult = 0.80f;
 	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) tierArmorMult = 1.10f;
 	else if (planet->mType == PlanetType::T2) tierArmorMult = 0.98f;
 	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.88f;
+
+	if (planet->mType == PlanetType::T0) {
+		if (arch == NormArch::Ecologist) totalHP *= 0.75f;
+		else if (arch == NormArch::Shaman) totalHP *= 0.85f;
+	}
+	if (arch == NormArch::Shaman && configGadgetMultiplier > 0.01f) {
+		cStarRecord* homeSt = empire->GetHomeStarRecord();
+		if (!homeSt || homeSt->mEmpireID != empire->GetEmpireID()) {
+			float nexusPenalty = 0.30f;
+			PropertyListPtr gProp;
+			if (PropManager.GetPropertyList(id(u"GadgetConfig"), 0x02ae0c7e, gProp) && gProp != nullptr) {
+				App::Property::GetFloat(gProp.get(), 0x07A1BC13, nexusPenalty);
+			}
+			totalHP *= max(0.45f, 1.0f - nexusPenalty);
+		}
+	}
 
 	// Гиперболическое насыщение инфраструктуры X / (X + K): вечная полезность застройки без хардкапа
 	float extraCities = static_cast<float>(max(GetColonyCount(planet) - 1, 0));
@@ -1142,18 +1158,20 @@ int cPlayerDefensiveShipsManager::GetMaxDefenders(cPlanetRecord* planet) {
 	if (planet->mbHomeWorld) baseDefenders = playerHomeworldDefenders;
 	else if (planet->mType == PlanetType::T0) baseDefenders = playerOutpostDefenders;
 
-	int rawTotal = baseDefenders + (colonyCount - 1) * stepBonus;
-	if (GetPlanetGadgetState(planet).hasSpiceStorage) {
-		rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * (1.0f + 0.25f * configGadgetMultiplier)));
-	}
-	rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * configFleetMultiplier));
-
-
 	cEmpire* empire = nullptr;
 	if (planet->GetStarRecord() && planet->GetStarRecord()->mEmpireID != 0) {
 		empire = StarManager.GetEmpire(planet->GetStarRecord()->mEmpireID);
 	}
 	if (!empire) empire = GetPlayerEmpire();
+
+	int rawTotal = baseDefenders + (colonyCount - 1) * stepBonus;
+	if (planet->mType == PlanetType::T0 && GetNormalizedArchetype(empire) == NormArch::Ecologist) {
+		rawTotal = max(1, static_cast<int>(round(static_cast<float>(rawTotal) * 0.55f)));
+	}
+	if (GetPlanetGadgetState(planet).hasSpiceStorage) {
+		rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * (1.0f + 0.25f * configGadgetMultiplier)));
+	}
+	rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * configFleetMultiplier));
 
 	int dynamicCap = GetDynamicSoftCap(empire);
 
