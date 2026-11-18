@@ -319,25 +319,61 @@ int cPlayerDefensiveShipsManager::GetDynamicMaxTreasury(cEmpire* empire) {
 	return max(dynamicCap, max(minFloor, 1));
 }
 
+static float ReadTradeSpiceWeight() {
+	float incomeMult = 1.0f;
+	float spiceWeight = 1.0f;
+	PropertyListPtr trProp;
+	if (PropManager.GetPropertyList(id(u"TradeConfig"), 0x02ae0c7e, trProp) && trProp != nullptr) {
+		App::Property::GetFloat(trProp.get(), 0x07A1BC07, incomeMult);
+		App::Property::GetFloat(trProp.get(), 0x07A1BC08, spiceWeight);
+	}
+	if (incomeMult <= 0.01f) return 0.0f;
+	return min(max(spiceWeight, 0.0f), 5.0f);
+}
+
+static void ReadLoreGadgetScales(float fallbackGadgetMult, float& outShamanScale, float& outEcoScale) {
+	outShamanScale = fallbackGadgetMult;
+	outEcoScale = fallbackGadgetMult;
+	if (fallbackGadgetMult <= 0.01f) {
+		outShamanScale = 0.0f;
+		outEcoScale = 0.0f;
+		return;
+	}
+	PropertyListPtr gProp;
+	if (PropManager.GetPropertyList(id(u"GadgetConfig"), 0x02ae0c7e, gProp) && gProp != nullptr) {
+		float nexusVal = -1.0f;
+		if (App::Property::GetFloat(gProp.get(), 0x07A1BC13, nexusVal) && nexusVal >= 0.0f) {
+			outShamanScale = nexusVal / 0.30f; // 0.0 / 0.5 / 1.0 / 1.5
+		}
+		float bioVal = -1.0f;
+		if (App::Property::GetFloat(gProp.get(), 0x07A1BC15, bioVal) && bioVal >= 0.0f) {
+			outEcoScale = bioVal / 0.06f; // 0.0 / 0.5 / 1.0 / 1.5
+		}
+	}
+}
+
 int cPlayerDefensiveShipsManager::CalculateShipBuildCost(cEmpire* empire) {
 	float refRedPrice = GetEngineRedSpiceReferencePrice();
-	if (!empire) return max(static_cast<int>(round(refRedPrice * 3.33f)), 1);
+	float unitHullPrice = refRedPrice * 3.333f;
+	if (!empire || configUpkeepMultiplier <= 0.01f) {
+		return max(static_cast<int>(round(unitHullPrice)), 1);
+	}
 
 	int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
 	float fillRatio = static_cast<float>(max(empire->mEmpireMoney, 0)) / static_cast<float>(maxTreasury);
+	float econScale = min(configUpkeepMultiplier, 2.0f);
 
-	// Гладкая S-кривая бюджета ВПК в единицах эталонной пряности (без зашитых констант в спорлингах)
-	float unitHullPrice = refRedPrice * 3.333f;
+	// Гладкая S-кривая бюджета ВПК, масштабируемая ползунком UpkeepConfig
 	float budgetSigmoid = 0.5f * (std::tanh((fillRatio - 0.65f) * 3.5f) + 1.0f);
-	float smoothBaseCost = unitHullPrice * (0.85f + 1.15f * budgetSigmoid);
+	float dynamicFactor = 1.0f + (-0.15f + 1.15f * budgetSigmoid) * min(econScale, 1.5f);
+	float smoothBaseCost = unitHullPrice * max(dynamicFactor, 0.50f);
 
-	// Гладкая степенная кривая административной инфляции
+	// Гладкая степенная кривая инфляции, масштабируемая ползунком UpkeepConfig
 	float systems = static_cast<float>(max(static_cast<int>(empire->mStars.size()) - 1, 0));
-	float inflationMultiplier = 1.0f + min(std::pow(systems, 0.75f) * 0.032f, 1.25f);
+	float inflationMultiplier = 1.0f + min(std::pow(systems, 0.75f) * 0.032f * econScale, 1.50f);
 
 	return max(static_cast<int>(round(smoothBaseCost * inflationMultiplier)), 1);
 }
-
 
 int cPlayerDefensiveShipsManager::CalculateEmpireFleetUpkeep(cEmpire* empire) {
 	if (!empire || configUpkeepMultiplier <= 0.01f) return 0;
@@ -982,41 +1018,47 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	float totalHP = baseDefenderHP * archetypeMultiplier;
 	if (!planet) return max(totalHP, 100.0f);
 
-	// 5. Т-индекс + Лорные особенности биосферы T0 / Астрального Нексуса (v1.1.4 - v1.1.4.2)
-	float tierArmorMult = 0.80f;
-	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) tierArmorMult = 1.10f;
-	else if (planet->mType == PlanetType::T2) tierArmorMult = 0.98f;
-	else if (planet->mType == PlanetType::T1) tierArmorMult = 0.88f;
+	// 5. Т-индекс, инфраструктура и лорные штрафы T0 (масштабируются ползунком GadgetConfig)
+	float rawTierDelta = -0.20f;
+	if (planet->mbHomeWorld || planet->mType == PlanetType::T3) rawTierDelta = 0.10f;
+	else if (planet->mType == PlanetType::T2) rawTierDelta = -0.02f;
+	else if (planet->mType == PlanetType::T1) rawTierDelta = -0.12f;
+
+	float infraScale = min(configGadgetMultiplier, 2.0f);
+	float tierArmorMult = 1.0f + rawTierDelta * min(infraScale, 1.25f);
+
+	float shamanScale = 0.0f, ecoScale = 0.0f;
+	ReadLoreGadgetScales(configGadgetMultiplier, shamanScale, ecoScale);
 
 	if (planet->mType == PlanetType::T0) {
-		if (arch == NormArch::Ecologist) totalHP *= 0.75f;
-		else if (arch == NormArch::Shaman) totalHP *= 0.85f;
+		if (arch == NormArch::Ecologist && ecoScale > 0.01f) {
+			totalHP *= max(0.50f, 1.0f - 0.25f * ecoScale);
+		} else if (arch == NormArch::Shaman && shamanScale > 0.01f) {
+			totalHP *= max(0.65f, 1.0f - 0.15f * shamanScale);
+		}
 	}
-	if (arch == NormArch::Shaman && configGadgetMultiplier > 0.01f) {
+	if (arch == NormArch::Shaman && shamanScale > 0.01f) {
 		cStarRecord* homeSt = empire->GetHomeStarRecord();
 		if (!homeSt || homeSt->mEmpireID != empire->GetEmpireID()) {
-			float nexusPenalty = 0.30f;
-			PropertyListPtr gProp;
-			if (PropManager.GetPropertyList(id(u"GadgetConfig"), 0x02ae0c7e, gProp) && gProp != nullptr) {
-				App::Property::GetFloat(gProp.get(), 0x07A1BC13, nexusPenalty);
-			}
-			totalHP *= max(0.45f, 1.0f - nexusPenalty);
+			totalHP *= max(0.45f, 1.0f - 0.30f * shamanScale);
 		}
 	}
 
-	// Гиперболическое насыщение инфраструктуры X / (X + K): вечная полезность застройки без хардкапа
 	float extraCities = static_cast<float>(max(GetColonyCount(planet) - 1, 0));
 	float turrets = static_cast<float>(max(GetTurretCount(planet), 0));
-	float cityHyperbola = 0.32f * (extraCities / (extraCities + 5.5f));
-	float turretHyperbola = 0.16f * (turrets / (turrets + 22.0f));
-	totalHP *= (tierArmorMult + cityHyperbola + turretHyperbola);
+	float cityHyperbola = (0.32f * infraScale) * (extraCities / (extraCities + 5.5f));
+	float turretHyperbola = (0.16f * infraScale) * (turrets / (turrets + 22.0f));
+	totalHP *= max(tierArmorMult + cityHyperbola + turretHyperbola, 0.50f);
 
-	// 6. Ценность местной пряности (гладкая гипербола логарифма без ступеньки)
-	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 1.0f);
-	float logSpice = std::log2(spiceRatio);
-	totalHP *= (1.0f + 0.20f * (logSpice / (logSpice + 2.5f)));
+	// 6. Ценность местной пряности (масштабируется ползунком TradeConfig -> spiceArbitrageWeight)
+	float spiceWeight = ReadTradeSpiceWeight();
+	if (spiceWeight > 0.01f) {
+		float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 1.0f);
+		float logSpice = std::log2(spiceRatio);
+		totalHP *= (1.0f + (0.20f * spiceWeight) * (logSpice / (logSpice + 2.5f)));
+	}
 
-	// 7. Планетарные постройки и гладкая S-кривая финансирования казны
+	// 7. Планетарные постройки (GadgetConfig) и S-кривая казны (UpkeepConfig)
 	PlanetaryGadgetState gadgets = GetPlanetGadgetState(planet);
 	float gadgetBonus = 0.0f;
 	if (gadgets.hasUberTurret) {
@@ -1028,20 +1070,20 @@ float cPlayerDefensiveShipsManager::CalculateShipHealth(cPlanetRecord* planet, c
 	}
 	totalHP *= (1.0f + gadgetBonus);
 
-	if (empire == GetPlayerEmpire()) {
+	if (empire == GetPlayerEmpire() && configUpkeepMultiplier > 0.01f) {
 		int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
 		float fillRatio = static_cast<float>(max(empire->mEmpireMoney, 0)) / static_cast<float>(maxTreasury);
+		float econScale = min(configUpkeepMultiplier, 2.0f);
 
 		if (unpaidUpkeepCycles > 0) {
-			float debtDecay = 1.0f / (1.0f + static_cast<float>(unpaidUpkeepCycles) * 0.18f);
-			totalHP *= max(0.65f, debtDecay);
+			float debtDecay = 1.0f / (1.0f + static_cast<float>(unpaidUpkeepCycles) * 0.18f * econScale);
+			totalHP *= max(0.55f, debtDecay);
 		} else {
-			float deficitDrop = 0.25f * std::exp(-fillRatio * 14.0f);
-			float surplusBoost = (totalStars >= 3) ? (0.16f * 0.5f * (std::tanh((fillRatio - 0.72f) * 4.0f) + 1.0f)) : 0.0f;
-			totalHP *= (1.0f - deficitDrop + surplusBoost);
+			float deficitDrop = (0.25f * min(econScale, 1.5f)) * std::exp(-fillRatio * 14.0f);
+			float surplusBoost = (totalStars >= 3) ? ((0.16f * min(econScale, 1.5f)) * 0.5f * (std::tanh((fillRatio - 0.72f) * 4.0f) + 1.0f)) : 0.0f;
+			totalHP *= max(1.0f - deficitDrop + surplusBoost, 0.55f);
 		}
 	}
-
 	return max(totalHP, 100.0f);
 }
 
@@ -1166,7 +1208,12 @@ int cPlayerDefensiveShipsManager::GetMaxDefenders(cPlanetRecord* planet) {
 
 	int rawTotal = baseDefenders + (colonyCount - 1) * stepBonus;
 	if (planet->mType == PlanetType::T0 && GetNormalizedArchetype(empire) == NormArch::Ecologist) {
-		rawTotal = max(1, static_cast<int>(round(static_cast<float>(rawTotal) * 0.55f)));
+		float shScale = 0.0f, ecScale = 0.0f;
+		ReadLoreGadgetScales(configGadgetMultiplier, shScale, ecScale);
+		if (ecScale > 0.01f) {
+			float t0Factor = max(0.30f, 1.0f - 0.45f * ecScale);
+			rawTotal = max(1, static_cast<int>(round(static_cast<float>(rawTotal) * t0Factor)));
+		}
 	}
 	if (GetPlanetGadgetState(planet).hasSpiceStorage) {
 		rawTotal = static_cast<int>(round(static_cast<float>(rawTotal) * (1.0f + 0.25f * configGadgetMultiplier)));
@@ -1216,9 +1263,13 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 	float extraCities = static_cast<float>(max(GetColonyCount(planet) - 1, 0));
 	float speedMultiplier = 0.50f + 0.50f / (1.0f + extraCities * 0.12f);
 
-	float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 0.5f);
-	float logSpice = std::log2(max(spiceRatio, 1.0f));
-	float spiceSpeedFactor = 0.96f - 0.42f * (logSpice / (logSpice + 2.8f));
+	float spiceSpeedFactor = 1.0f;
+	float spiceWeight = ReadTradeSpiceWeight();
+	if (spiceWeight > 0.01f) {
+		float spiceRatio = max(GetSpiceBasePrice(planet) / GetEngineRedSpiceReferencePrice(), 0.5f);
+		float logSpice = std::log2(max(spiceRatio, 1.0f));
+		spiceSpeedFactor = max(0.45f, 1.0f - (0.42f * min(spiceWeight, 1.5f)) * (logSpice / (logSpice + 2.8f)));
+	}
 
 	cEmpire* empire = nullptr;
 	if (planet->GetStarRecord() && planet->GetStarRecord()->mEmpireID != 0) {
@@ -1227,16 +1278,17 @@ int cPlayerDefensiveShipsManager::GetDynamicReinforceTime(cPlanetRecord* planet)
 	if (!empire) empire = GetPlayerEmpire();
 
 	float treasurySpeedFactor = 1.0f;
-	if (empire && empire == GetPlayerEmpire()) {
+	if (empire && empire == GetPlayerEmpire() && configUpkeepMultiplier > 0.01f) {
 		int maxTreasury = max(GetDynamicMaxTreasury(empire), 1);
 		float fillRatio = static_cast<float>(max(empire->mEmpireMoney, 0)) / static_cast<float>(maxTreasury);
+		float econScale = min(configUpkeepMultiplier, 2.0f);
 
 		if (unpaidUpkeepCycles > 0) {
-			treasurySpeedFactor = 1.35f + min(static_cast<float>(unpaidUpkeepCycles) * 0.25f, 1.15f);
+			treasurySpeedFactor = 1.0f + (0.35f + min(static_cast<float>(unpaidUpkeepCycles) * 0.25f, 1.15f)) * min(econScale, 1.5f);
 		} else {
-			float crisisLag = 1.20f * std::exp(-fillRatio * 14.0f);
-			float surplusRush = (empire->mStars.size() >= 3) ? (0.25f * 0.5f * (std::tanh((fillRatio - 0.72f) * 4.0f) + 1.0f)) : 0.0f;
-			treasurySpeedFactor = 1.0f + crisisLag - surplusRush;
+			float crisisLag = (1.20f * min(econScale, 1.5f)) * std::exp(-fillRatio * 14.0f);
+			float surplusRush = (empire->mStars.size() >= 3) ? ((0.25f * min(econScale, 1.5f)) * 0.5f * (std::tanh((fillRatio - 0.72f) * 4.0f) + 1.0f)) : 0.0f;
+			treasurySpeedFactor = max(0.55f, 1.0f + crisisLag - surplusRush);
 		}
 	}
 
